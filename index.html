@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hackathon Tracker</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #ffffff; --bg-2: #f5f5f4; --bg-3: #eeece9;
+  --text: #1a1a1a; --text-2: #6b6b6b; --text-3: #9a9a9a;
+  --border: rgba(0,0,0,0.12); --border-md: rgba(0,0,0,0.22);
+  --r-sm: 6px; --r-md: 8px; --r-lg: 12px;
+  --success-bg:#EAF3DE;--success-text:#27500A;
+  --warn-bg:#FAEEDA;--warn-text:#633806;
+  --danger-bg:#FCEBEB;--danger-text:#791F1F;
+  --info-bg:#E6F1FB;--info-text:#0C447C;
+  --teal-bg:#E1F5EE;--teal-text:#085041;
+  --accent: #1D9E75;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#1c1c1c;--bg-2:#252525;--bg-3:#2e2e2e;
+    --text:#f0f0f0;--text-2:#a0a0a0;--text-3:#6a6a6a;
+    --border:rgba(255,255,255,0.1);--border-md:rgba(255,255,255,0.2);
+    --success-bg:#173404;--success-text:#C0DD97;
+    --warn-bg:#412402;--warn-text:#FAC775;
+    --danger-bg:#501313;--danger-text:#F7C1C1;
+    --info-bg:#042C53;--info-text:#B5D4F4;
+    --teal-bg:#04342C;--teal-text:#9FE1CB;
+  }
+}
+
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background:var(--bg-3);color:var(--text);font-size:14px;line-height:1.5;
+  min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;
+}
+
+/* Config screen */
+#config-screen{
+  width:100%;max-width:480px;background:var(--bg);border:0.5px solid var(--border);
+  border-radius:var(--r-lg);padding:32px;margin-top:60px;
+}
+#config-screen h2{font-size:18px;font-weight:500;margin-bottom:6px;}
+#config-screen p{font-size:13px;color:var(--text-2);margin-bottom:24px;line-height:1.6;}
+.config-badge{display:inline-block;background:var(--teal-bg);color:var(--teal-text);font-size:11px;padding:3px 10px;border-radius:99px;font-weight:500;margin-bottom:16px;}
+
+/* App shell */
+.app-shell{
+  width:100%;max-width:960px;background:var(--bg);border:0.5px solid var(--border);
+  border-radius:var(--r-lg);display:grid;grid-template-columns:220px minmax(0,1fr);
+  min-height:640px;overflow:hidden;
+}
+
+/* Sidebar */
+.sidebar{background:var(--bg-2);border-right:0.5px solid var(--border);display:flex;flex-direction:column;}
+.sidebar-top{padding:14px;border-bottom:0.5px solid var(--border);}
+.hack-sel{
+  width:100%;padding:6px 8px;font-size:13px;border:0.5px solid var(--border-md);
+  border-radius:var(--r-sm);background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer;
+}
+.hack-tags{font-size:11px;color:var(--text-3);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sidebar-nav{flex:1;padding:8px 0;}
+.nav-item{
+  display:flex;align-items:center;gap:9px;padding:8px 16px;font-size:13px;color:var(--text-2);
+  cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:inherit;
+}
+.nav-item:hover{background:var(--bg);color:var(--text);}
+.nav-item.active{background:var(--bg);color:var(--text);font-weight:500;border-right:2px solid var(--text);}
+.nav-item i{font-size:15px;flex-shrink:0;}
+.nav-count{margin-left:auto;font-size:11px;background:var(--bg-3);border-radius:99px;padding:1px 7px;color:var(--text-2);}
+.sidebar-footer{padding:12px 14px;border-top:0.5px solid var(--border);display:flex;flex-direction:column;gap:6px;}
+
+/* Main */
+.main{display:flex;flex-direction:column;}
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 20px;border-bottom:0.5px solid var(--border);min-height:50px;
+}
+.topbar-title{font-size:15px;font-weight:500;}
+.topbar-actions{display:flex;gap:6px;align-items:center;}
+.content{padding:20px;flex:1;overflow-y:auto;}
+
+/* Connection indicator */
+.conn-dot{
+  width:7px;height:7px;border-radius:50%;background:#888;
+  display:inline-block;margin-right:5px;flex-shrink:0;
+}
+.conn-dot.ok{background:#1D9E75;}
+.conn-dot.err{background:#E24B4A;}
+.conn-status{display:flex;align-items:center;font-size:12px;color:var(--text-2);}
+
+/* Buttons */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;padding:6px 12px;
+  border:0.5px solid var(--border-md);border-radius:var(--r-sm);background:none;
+  color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;
+}
+.btn:hover{background:var(--bg-2);}
+.btn-primary{background:var(--text);color:var(--bg);border-color:var(--text);}
+.btn-primary:hover{opacity:.85;}
+.btn-ghost{border:none;padding:5px 8px;color:var(--text-2);}
+.btn-ghost:hover{color:var(--text);background:var(--bg-2);}
+.btn-danger{color:var(--danger-text);border-color:rgba(226,75,74,.3);}
+.btn-danger:hover{background:var(--danger-bg);}
+.btn-full{width:100%;justify-content:center;font-size:12px;}
+.btn-sm{padding:4px 9px;font-size:12px;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+
+/* Metrics */
+.metrics-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:18px;}
+.metric{background:var(--bg-2);border-radius:var(--r-md);padding:12px 14px;}
+.metric-val{font-size:22px;font-weight:500;line-height:1.2;}
+.metric-lbl{font-size:11px;color:var(--text-2);margin-top:3px;}
+
+/* Progress */
+.prog-track{height:6px;background:var(--bg-3);border-radius:99px;overflow:hidden;margin-bottom:6px;}
+.prog-fill{height:100%;border-radius:99px;background:var(--accent);transition:width .3s;}
+.prog-label{font-size:11px;color:var(--text-2);margin-bottom:18px;}
+
+/* Panel */
+.panel{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:14px;}
+.panel-head{
+  padding:11px 16px;border-bottom:0.5px solid var(--border);display:flex;
+  align-items:center;justify-content:space-between;background:var(--bg-2);
+}
+.panel-head-title{font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;}
+
+/* Row items */
+.row-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:0.5px solid var(--border);}
+.row-item:last-child{border-bottom:none;}
+.row-item:hover{background:var(--bg-2);}
+.row-item:hover .row-actions{opacity:1;}
+.row-main{flex:1;min-width:0;}
+.row-title{font-size:13px;font-weight:500;}
+.row-sub{font-size:11px;color:var(--text-2);margin-top:2px;}
+.row-actions{display:flex;gap:4px;opacity:0;transition:opacity .1s;}
+
+/* Avatar */
+.av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;}
+.av-0{background:#E6F1FB;color:#0C447C;}
+.av-1{background:#E1F5EE;color:#085041;}
+.av-2{background:#FAECE7;color:#712B13;}
+.av-3{background:#FBEAF0;color:#72243E;}
+.av-4{background:#FAEEDA;color:#633806;}
+.av-5{background:#EEEDFE;color:#3C3489;}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:var(--r-sm);font-weight:500;white-space:nowrap;}
+.b-green{background:var(--success-bg);color:var(--success-text);}
+.b-red{background:var(--danger-bg);color:var(--danger-text);}
+.b-amber{background:var(--warn-bg);color:var(--warn-text);}
+.b-blue{background:var(--info-bg);color:var(--info-text);}
+.b-teal{background:var(--teal-bg);color:var(--teal-text);}
+.b-gray{background:var(--bg-3);color:var(--text-2);}
+
+/* Checkbox */
+.check{width:16px;height:16px;border-radius:3px;border:0.5px solid var(--border-md);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.check.on{background:var(--success-bg);border-color:#3B6D11;}
+.check.on i{font-size:11px;color:var(--success-text);}
+
+/* KV table */
+.kv-table{width:100%;font-size:13px;border-collapse:collapse;}
+.kv-table td{padding:9px 16px;vertical-align:top;}
+.kv-table tr{border-bottom:0.5px solid var(--border);}
+.kv-table tr:last-child{border-bottom:none;}
+.kv-key{color:var(--text-2);width:140px;}
+
+/* Empty */
+.empty{padding:32px 16px;text-align:center;color:var(--text-2);font-size:13px;}
+.empty i{font-size:24px;display:block;margin:0 auto 10px;}
+
+/* Modal */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.4);
+  display:flex;align-items:center;justify-content:center;z-index:100;
+}
+.modal{
+  background:var(--bg);border:0.5px solid var(--border);border-radius:var(--r-lg);
+  padding:22px;width:min(520px,92vw);max-height:90vh;overflow-y:auto;
+}
+.modal h3{font-size:15px;font-weight:500;margin-bottom:16px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:12px;color:var(--text-2);margin-bottom:4px;}
+.field input,.field select,.field textarea{
+  width:100%;padding:7px 10px;border:0.5px solid var(--border-md);border-radius:var(--r-sm);
+  background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;
+}
+.field textarea{min-height:70px;resize:vertical;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:0.5px solid var(--border);}
+
+/* Import tabs */
+.import-tabs{display:flex;border-bottom:0.5px solid var(--border);margin-bottom:16px;}
+.import-tab{
+  padding:8px 14px;font-size:13px;cursor:pointer;border:none;background:none;
+  color:var(--text-2);font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.import-tab.active{color:var(--text);border-bottom-color:var(--text);font-weight:500;}
+.import-pane{display:none;}
+.import-pane.active{display:block;}
+
+/* Bulk form steps */
+.step-header{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--text);color:var(--bg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.step-lbl{font-size:13px;font-weight:500;}
+.hack-card-mini{border:0.5px solid var(--border);border-radius:var(--r-md);padding:10px 14px;margin-bottom:8px;background:var(--bg-2);}
+.hack-card-mini .hc-name{font-size:13px;font-weight:500;}
+.hack-card-mini .hc-sub{font-size:11px;color:var(--text-2);}
+.repeat-btn{font-size:12px;color:var(--accent);cursor:pointer;border:none;background:none;padding:0;font-family:inherit;}
+
+/* About body */
+.about-body{padding:14px 16px;font-size:13px;color:var(--text-2);line-height:1.7;}
+.about-tags{padding:0 16px 14px;display:flex;gap:6px;flex-wrap:wrap;}
+
+/* Loading spinner */
+.spinner{width:16px;height:16px;border:2px solid var(--border-md);border-top-color:var(--text);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--text);color:var(--bg);padding:9px 18px;border-radius:var(--r-md);
+  font-size:13px;z-index:200;transition:transform .25s;pointer-events:none;
+}
+#toast.show{transform:translateX(-50%) translateY(0);}
+
+@media (max-width:600px){
+  body{padding:0;}
+  .app-shell{grid-template-columns:1fr;border-radius:0;min-height:100vh;}
+  .sidebar{border-right:none;border-bottom:0.5px solid var(--border);}
+  .sidebar-nav{display:flex;overflow-x:auto;padding:4px 8px;}
+  .nav-item{flex-direction:column;gap:2px;font-size:11px;padding:6px 10px;white-space:nowrap;border-right:none!important;}
+  .nav-item.active{border-right:none;border-bottom:2px solid var(--text);}
+  .nav-count{display:none;}
+  .metrics-row{grid-template-columns:repeat(2,1fr);}
+}
+</style>
+</head>
+<body>
+
+<!-- Config screen (shown until credentials entered) -->
+<div id="config-screen">
+  <div class="config-badge">Supabase backend</div>
+  <h2>Connect your database</h2>
+  <p>Enter your Supabase project URL and <strong>anon</strong> public key. Run the SQL schema first in your Supabase SQL Editor. Credentials are saved in localStorage.</p>
+  <div class="field"><label>Supabase project URL</label><input id="cfg-url" placeholder="https://xxxx.supabase.co" type="url"></div>
+  <div class="field"><label>Anon public key</label><input id="cfg-key" placeholder="eyJ..." type="password"></div>
+  <div style="display:flex;gap:8px;margin-top:4px;">
+    <button class="btn btn-primary" onclick="saveConfig()" style="flex:1;">Connect</button>
+    <button class="btn" onclick="useDemoMode()" style="flex:1;" title="Uses localStorage, no Supabase needed">Demo mode</button>
+  </div>
+  <p style="margin-top:12px;font-size:11px;color:var(--text-3);">
+    Need the SQL schema? <a href="#" onclick="downloadSchema()" style="color:var(--accent);">Download schema.sql</a>
+  </p>
+</div>
+
+<!-- Main app (hidden until connected) -->
+<div class="app-shell" id="app" style="display:none;">
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <select class="hack-sel" id="hack-sel"></select>
+      <div class="hack-tags" id="hack-tags"></div>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav">
+      <button class="nav-item active" data-view="overview"><i class="ti ti-layout-dashboard"></i> Overview</button>
+      <button class="nav-item" data-view="registration"><i class="ti ti-clipboard-check"></i> Registration</button>
+      <button class="nav-item" data-view="team"><i class="ti ti-users"></i> Team <span class="nav-count" id="nc-team"></span></button>
+      <button class="nav-item" data-view="dates"><i class="ti ti-calendar-event"></i> Dates <span class="nav-count" id="nc-dates"></span></button>
+      <button class="nav-item" data-view="tasks"><i class="ti ti-checklist"></i> Tasks <span class="nav-count" id="nc-tasks"></span></button>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn btn-full" id="import-btn"><i class="ti ti-file-import"></i> Bulk import</button>
+      <button class="btn btn-full" id="new-hack-btn"><i class="ti ti-plus"></i> New hackathon</button>
+      <div class="conn-status" id="conn-status"><span class="conn-dot" id="conn-dot"></span><span id="conn-text">Connecting…</span></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <span class="topbar-title" id="topbar-title">Overview</span>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+    <div class="content" id="view-content"></div>
+  </main>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast"></div>
+
+<script>
+// ─── Config & DB ───────────────────────────────────────────────────────────────
+let SB_URL = '', SB_KEY = '', DEMO = false;
+const LS_CFG = 'ht-supabase-cfg', LS_DEMO = 'hackathon-tracker-v3';
+
+function saveConfig() {
+  SB_URL = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  SB_KEY = document.getElementById('cfg-key').value.trim();
+  if (!SB_URL || !SB_KEY) { toast('Enter both URL and key'); return; }
+  localStorage.setItem(LS_CFG, JSON.stringify({ url: SB_URL, key: SB_KEY }));
+  bootApp();
+}
+
+function useDemoMode() {
+  DEMO = true;
+  localStorage.removeItem(LS_CFG);
+  bootApp();
+}
+
+function downloadSchema() {
+  const a = document.createElement('a');
+  a.href = 'supabase_schema.sql'; a.download = 'supabase_schema.sql'; a.click();
+}
+
+async function sbFetch(path, opts = {}) {
+  if (DEMO) throw new Error('demo');
+  const r = await fetch(SB_URL + '/rest/v1/' + path, {
+    ...opts,
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': opts.prefer || 'return=representation',
+      ...(opts.headers || {})
+    }
+  });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.message || r.status); }
+  return r.status === 204 ? null : r.json();
+}
+
+// ─── State (demo mode uses this) ───────────────────────────────────────────────
+let S = { hackathons: [], cur: null };
+let VIEW = 'overview';
+
+function loadDemo() {
+  try { const r = localStorage.getItem(LS_DEMO); if (r) S = JSON.parse(r); } catch(e) {}
+  if (!S.hackathons.length) seedDemo();
+  if (!S.cur && S.hackathons.length) S.cur = S.hackathons[0].id;
+}
+
+function saveDemo() {
+  try { localStorage.setItem(LS_DEMO, JSON.stringify(S)); } catch(e) {}
+}
+
+function uid() { return Math.random().toString(36).slice(2,10); }
+
+function seedDemo() {
+  const h = { id: uid(), name: 'EcoHack 2025', description: 'Build sustainable solutions using IoT and AI to address climate challenges.', tags: ['Climate','IoT','AI'],
+    team: [
+      { id: uid(), name: 'Priya Sharma', role: 'Team Lead', email: 'priya@example.com' },
+      { id: uid(), name: 'Arjun Mehta', role: 'Backend Dev', email: 'arjun@example.com' },
+    ],
+    dates: [
+      { id: uid(), label: 'Registration closes', date: '2025-07-01', type: 'deadline' },
+      { id: uid(), label: 'Kick-off', date: '2025-07-15', type: 'event' },
+    ],
+    tasks: [
+      { id: uid(), title: 'Register team on portal', done: true, who: 'Priya Sharma', pri: 'high' },
+      { id: uid(), title: 'Set up GitHub repository', done: false, who: 'Arjun Mehta', pri: 'med' },
+    ],
+    reg: { status: 'registered', team: 'GreenByte', track: 'Climate Tech', refId: 'ECO-4821', link: 'https://ecohack.dev', notes: 'Bring HDMI adapters.' }
+  };
+  S.hackathons.push(h); S.cur = h.id;
+  saveDemo();
+}
+
+const curH = () => S.hackathons.find(h => h.id === S.cur);
+
+// ─── DB helpers (real Supabase) ────────────────────────────────────────────────
+// Cache: { hackathons[], members{id:[]}, dates{id:[]}, tasks{id:[]}, regs{id:{}} }
+let cache = { hackathons: [], members: {}, dates: {}, tasks: {}, regs: {} };
+
+async function loadAllHackathons() {
+  if (DEMO) return;
+  try {
+    const [hs, ms, ds, ts, rs] = await Promise.all([
+      sbFetch('hackathons?select=*&order=created_at.asc'),
+      sbFetch('team_members?select=*'),
+      sbFetch('dates?select=*&order=date.asc'),
+      sbFetch('tasks?select=*'),
+      sbFetch('registrations?select=*'),
+    ]);
+    cache.hackathons = hs || [];
+    cache.members = {}; (ms||[]).forEach(m => { (cache.members[m.hackathon_id]||=[]).push(m); });
+    cache.dates = {};   (ds||[]).forEach(d => { (cache.dates[d.hackathon_id]||=[]).push(d); });
+    cache.tasks = {};   (ts||[]).forEach(t => { (cache.tasks[t.hackathon_id]||=[]).push(t); });
+    cache.regs = {};    (rs||[]).forEach(r => { cache.regs[r.hackathon_id] = r; });
+    setConn(true);
+  } catch(e) {
+    setConn(false); toast('DB error: ' + e.message);
+  }
+}
+
+function sbHackathons() { return DEMO ? S.hackathons : cache.hackathons; }
+function sbCur() {
+  if (DEMO) return curH();
+  return cache.hackathons.find(h => h.id === S.cur);
+}
+function sbTeam(hid) { return DEMO ? (curH()||{}).team||[] : cache.members[hid]||[]; }
+function sbDates(hid) { return DEMO ? (curH()||{}).dates||[] : cache.dates[hid]||[]; }
+function sbTasks(hid) { return DEMO ? (curH()||{}).tasks||[] : cache.tasks[hid]||[]; }
+function sbReg(hid) {
+  if (DEMO) return (curH()||{}).reg || { status:'not_started', team:'', track:'', refId:'', link:'', notes:'' };
+  return cache.regs[hid] || { status:'not_started', team_name:'', track:'', ref_id:'', link:'', notes:'' };
+}
+
+function setConn(ok) {
+  document.getElementById('conn-dot').className = 'conn-dot ' + (ok ? 'ok' : 'err');
+  document.getElementById('conn-text').textContent = ok ? 'Connected' : 'Offline';
+}
+
+// ─── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ─── Format helpers ────────────────────────────────────────────────────────────
+const AVC = ['av-0','av-1','av-2','av-3','av-4','av-5'];
+const ini = n => n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+const avc = n => { let h=0; for(let c of n) h=(h*31+c.charCodeAt(0))%AVC.length; return AVC[h]; };
+const fmt = d => new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+const diff = d => {
+  const x = Math.ceil((new Date(d+'T00:00:00')-new Date())/864e5);
+  return x<0?`${-x}d ago`:x===0?'today':`in ${x}d`;
+};
+
+// ─── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  const h = sbCur(); if (!h) { document.getElementById('view-content').innerHTML = '<div class="empty"><i class="ti ti-ghost"></i>No hackathons yet. Create one or use bulk import.</div>'; return; }
+  const hid = h.id;
+  const tasks = sbTasks(hid);
+  const done = tasks.filter(t=>t.done).length, total = tasks.length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  const upcomingDates = sbDates(hid).filter(d=>new Date(d.date+'T00:00:00')>=new Date()).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const nextDate = upcomingDates[0];
+
+  // Sidebar
+  const sel = document.getElementById('hack-sel');
+  sel.innerHTML = sbHackathons().map(x=>`<option value="${x.id}"${x.id===S.cur?' selected':''}>${x.name}</option>`).join('');
+  document.getElementById('hack-tags').textContent = (h.tags||[]).length ? h.tags.join(' · ') : 'No tags';
+  document.getElementById('nc-team').textContent = sbTeam(hid).length;
+  document.getElementById('nc-dates').textContent = sbDates(hid).length;
+  document.getElementById('nc-tasks').textContent = `${done}/${total}`;
+
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===VIEW));
+  const titles = {overview:'Overview',registration:'Registration',team:'Team',dates:'Dates',tasks:'Tasks'};
+  document.getElementById('topbar-title').textContent = titles[VIEW];
+
+  // Topbar actions
+  const acts = document.getElementById('topbar-actions');
+  acts.innerHTML = '';
+  if (VIEW==='team') acts.innerHTML = `<button class="btn btn-primary" id="ta-add"><i class="ti ti-plus"></i> Add member</button>`;
+  else if (VIEW==='dates') acts.innerHTML = `<button class="btn btn-primary" id="ta-add"><i class="ti ti-plus"></i> Add date</button>`;
+  else if (VIEW==='tasks') acts.innerHTML = `<select id="ta-filter" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border-md);border-radius:var(--r-sm);background:var(--bg);color:var(--text);font-family:inherit;"><option value="all">All</option><option value="todo">To do</option><option value="done">Done</option></select><button class="btn btn-primary" id="ta-add"><i class="ti ti-plus"></i> Add task</button>`;
+  else if (VIEW==='registration') acts.innerHTML = `<button class="btn" id="ta-edit"><i class="ti ti-edit"></i> Edit</button>`;
+  else if (VIEW==='overview') acts.innerHTML = `<button class="btn" id="ta-edit"><i class="ti ti-edit"></i> Edit</button><button class="btn btn-danger" id="ta-del"><i class="ti ti-trash"></i></button>`;
+
+  const addBtn = document.getElementById('ta-add');
+  if (addBtn) addBtn.onclick = () => { if(VIEW==='team') memberModal(); else if(VIEW==='dates') dateModal(); else if(VIEW==='tasks') taskModal(); };
+  const filterEl = document.getElementById('ta-filter');
+  if (filterEl) filterEl.onchange = render;
+  const editBtn = document.getElementById('ta-edit');
+  if (editBtn) editBtn.onclick = () => { if(VIEW==='registration') regModal(); else hackModal(h); };
+  const delBtn = document.getElementById('ta-del');
+  if (delBtn) delBtn.onclick = () => deleteHackathon(hid, h.name);
+
+  const vc = document.getElementById('view-content');
+
+  if (VIEW==='overview') {
+    vc.innerHTML = `
+      <div class="metrics-row">
+        <div class="metric"><div class="metric-val">${sbTeam(hid).length}</div><div class="metric-lbl">Team members</div></div>
+        <div class="metric"><div class="metric-val">${done}/${total}</div><div class="metric-lbl">Tasks done</div></div>
+        <div class="metric"><div class="metric-val">${pct}%</div><div class="metric-lbl">Progress</div></div>
+        <div class="metric"><div class="metric-val" style="font-size:16px">${nextDate?diff(nextDate.date):'—'}</div><div class="metric-lbl">${nextDate?nextDate.label:'No upcoming dates'}</div></div>
+      </div>
+      <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+      <p class="prog-label">${pct}% complete · ${total-done} task${total-done!==1?'s':''} remaining</p>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-head-title">About</span></div>
+        <div class="about-body">${h.description||h.desc||'No description yet.'}</div>
+        ${(h.tags||[]).length?`<div class="about-tags">${h.tags.map(t=>`<span class="badge b-blue">${t}</span>`).join('')}</div>`:''}
+      </div>`;
+
+  } else if (VIEW==='registration') {
+    const r = sbReg(hid);
+    const stmap={registered:'b-green',not_started:'b-gray',pending:'b-amber',cancelled:'b-red'};
+    const stlbl={registered:'Registered',not_started:'Not started',pending:'Pending',cancelled:'Cancelled'};
+    const regStatus = r.status;
+    const rows = [
+      ['Status',`<span class="badge ${stmap[regStatus]||'b-gray'}">${stlbl[regStatus]||regStatus}</span>`],
+      ['Team name', r.team_name||r.team],['Track',r.track],['Reference ID',r.ref_id||r.refId],
+      ['Link',r.link?`<a href="${r.link}" target="_blank" rel="noopener" style="color:var(--info-text)">${r.link}</a>`:''],
+      ['Notes',r.notes],
+    ].filter(([,v])=>v);
+    vc.innerHTML = `<div class="panel"><table class="kv-table">${rows.map(([k,v])=>`<tr><td class="kv-key">${k}</td><td>${v}</td></tr>`).join('')}</table>${!rows.length?'<div class="empty"><i class="ti ti-clipboard-text"></i>No registration details yet. Click Edit.</div>':''}</div>`;
+
+  } else if (VIEW==='team') {
+    const members = sbTeam(hid);
+    vc.innerHTML = `<div class="panel">${members.length?members.map(m=>`
+      <div class="row-item">
+        <div class="av ${avc(m.name)}">${ini(m.name)}</div>
+        <div class="row-main"><div class="row-title">${m.name}</div><div class="row-sub">${m.role}${m.email?' · '+m.email:''}</div></div>
+        <div class="row-actions">
+          <button class="btn btn-ghost" onclick="memberModal('${m.id}')"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-ghost btn-danger" onclick="delMember('${m.id}')"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>`).join(''):'<div class="empty"><i class="ti ti-users"></i>No team members yet</div>'}</div>`;
+
+  } else if (VIEW==='dates') {
+    const sorted = [...sbDates(hid)].sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const typeBadge = t=>({deadline:'b-red',event:'b-blue',milestone:'b-teal',info:'b-gray'}[t]||'b-gray');
+    vc.innerHTML = `<div class="panel">${sorted.length?sorted.map(d=>`
+      <div class="row-item">
+        <div style="width:28px;height:28px;border-radius:var(--r-sm);background:var(--bg-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-calendar" style="font-size:14px"></i></div>
+        <div class="row-main"><div class="row-title">${d.label}</div><div class="row-sub">${fmt(d.date)} · ${diff(d.date)}</div></div>
+        <span class="badge ${typeBadge(d.type)}">${d.type}</span>
+        <div class="row-actions">
+          <button class="btn btn-ghost" onclick="dateModal('${d.id}')"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-ghost btn-danger" onclick="delDate('${d.id}')"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>`).join(''):'<div class="empty"><i class="ti ti-calendar-event"></i>No dates added yet</div>'}</div>`;
+
+  } else if (VIEW==='tasks') {
+    const fv = (document.getElementById('ta-filter')||{value:'all'}).value;
+    let ts2 = sbTasks(hid);
+    if (fv==='todo') ts2=ts2.filter(t=>!t.done);
+    if (fv==='done') ts2=ts2.filter(t=>t.done);
+    const priBadge = p=>({high:'b-red',med:'b-amber',low:'b-blue'}[p]||'b-gray');
+    vc.innerHTML = `<div class="panel">${ts2.length?ts2.map(t=>`
+      <div class="row-item">
+        <div class="check ${t.done?'on':''}" onclick="toggleTask('${t.id}')">${t.done?'<i class="ti ti-check"></i>':''}</div>
+        <div class="row-main">
+          <div class="row-title" style="${t.done?'text-decoration:line-through;color:var(--text-2)':''}">${t.title}</div>
+          ${(t.who||t.assigned_to)?`<div class="row-sub"><i class="ti ti-user" style="font-size:11px"></i> ${t.who||t.assigned_to}</div>`:''}
+        </div>
+        <span class="badge ${priBadge(t.pri||t.priority)}">${t.pri||t.priority}</span>
+        <div class="row-actions">
+          <button class="btn btn-ghost" onclick="taskModal('${t.id}')"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-ghost btn-danger" onclick="delTask('${t.id}')"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>`).join(''):`<div class="empty"><i class="ti ti-checklist"></i>No tasks${fv!=='all'?' in this filter':''}</div>`}</div>`;
+  }
+}
+
+// ─── CRUD helpers ───────────────────────────────────────────────────────────────
+async function withLoad(fn) {
+  try { await fn(); if (!DEMO) await loadAllHackathons(); render(); }
+  catch(e) { toast('Error: ' + e.message); }
+}
+
+// Hackathon
+function showModal(html) {
+  closeModal();
+  const el = document.createElement('div');
+  el.className='modal-overlay'; el.id='modal-overlay';
+  el.innerHTML=`<div class="modal">${html}</div>`;
+  el.onclick = e => { if(e.target===el) closeModal(); };
+  document.getElementById('modal-root').appendChild(el);
+}
+function closeModal() { const m=document.getElementById('modal-overlay'); if(m) m.remove(); }
+
+function hackModal(h) {
+  showModal(`<h3>${h?'Edit hackathon':'New hackathon'}</h3>
+    <div class="field"><label>Name</label><input id="f-name" value="${h?h.name:''}"></div>
+    <div class="field"><label>Description</label><textarea id="f-desc">${h?h.description||h.desc||'':''}</textarea></div>
+    <div class="field"><label>Tags (comma-separated)</label><input id="f-tags" value="${h?(h.tags||[]).join(', '):''}"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveHack('${h?h.id:''}')">Save</button>
+    </div>`);
+}
+
+window.saveHack = async id => {
+  const name = document.getElementById('f-name').value.trim(); if(!name) return;
+  const desc = document.getElementById('f-desc').value.trim();
+  const tags = document.getElementById('f-tags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  closeModal();
+  await withLoad(async () => {
+    if (DEMO) {
+      if (id) { const h=curH(); h.name=name; h.description=desc; h.tags=tags; }
+      else { const h={id:uid(),name,description:desc,tags,team:[],dates:[],tasks:[],reg:{status:'not_started',team:'',track:'',refId:'',link:'',notes:''}}; S.hackathons.push(h); S.cur=h.id; }
+      saveDemo();
+    } else {
+      if (id) {
+        await sbFetch(`hackathons?id=eq.${id}`, { method:'PATCH', body: JSON.stringify({name,description:desc,tags}) });
+      } else {
+        const [newH] = await sbFetch('hackathons', { method:'POST', body: JSON.stringify({name,description:desc,tags}) });
+        S.cur = newH.id;
+        await sbFetch('registrations', { method:'POST', body: JSON.stringify({hackathon_id:newH.id,status:'not_started'}) });
+      }
+    }
+    toast(id?'Hackathon updated':'Hackathon created');
+  });
+};
+
+async function deleteHackathon(hid, name) {
+  if (sbHackathons().length<=1) { toast('Need at least one hackathon'); return; }
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  await withLoad(async () => {
+    if (DEMO) { S.hackathons=S.hackathons.filter(x=>x.id!==hid); S.cur=S.hackathons[0].id; saveDemo(); }
+    else { await sbFetch(`hackathons?id=eq.${hid}`, {method:'DELETE', prefer:''}); S.cur=cache.hackathons.find(x=>x.id!==hid)?.id; }
+    toast('Hackathon deleted');
+  });
+}
+
+// Team
+function memberModal(id) {
+  const h=sbCur(); const members=sbTeam(h.id); const m=id?members.find(x=>x.id===id):{};
+  showModal(`<h3>${id?'Edit member':'Add member'}</h3>
+    <div class="field"><label>Full name</label><input id="f-mn" value="${m.name||''}"></div>
+    <div class="field-row">
+      <div class="field"><label>Role</label><input id="f-mr" value="${m.role||''}"></div>
+      <div class="field"><label>Email</label><input id="f-me" value="${m.email||''}"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMember('${id||''}')">Save</button>
+    </div>`);
+}
+
+window.saveMember = async id => {
+  const h=sbCur();
+  const name=document.getElementById('f-mn').value.trim(); if(!name) return;
+  const role=document.getElementById('f-mr').value.trim(), email=document.getElementById('f-me').value.trim();
+  closeModal();
+  await withLoad(async () => {
+    if (DEMO) {
+      const obj={id:id||uid(),name,role,email};
+      if(id){const i=h.team.findIndex(x=>x.id===id);h.team[i]=obj;}else h.team.push(obj);
+      saveDemo();
+    } else {
+      if(id) await sbFetch(`team_members?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({name,role,email})});
+      else await sbFetch('team_members',{method:'POST',body:JSON.stringify({hackathon_id:h.id,name,role,email})});
+    }
+  });
+};
+
+window.delMember = async id => {
+  const h=sbCur();
+  await withLoad(async () => {
+    if(DEMO){h.team=h.team.filter(x=>x.id!==id);saveDemo();}
+    else await sbFetch(`team_members?id=eq.${id}`,{method:'DELETE',prefer:''});
+  });
+};
+
+// Dates
+function dateModal(id) {
+  const h=sbCur(); const dates=sbDates(h.id); const d=id?dates.find(x=>x.id===id):{};
+  showModal(`<h3>${id?'Edit date':'Add date'}</h3>
+    <div class="field"><label>Label</label><input id="f-dl" value="${d.label||''}"></div>
+    <div class="field-row">
+      <div class="field"><label>Date</label><input type="date" id="f-dd" value="${d.date||''}"></div>
+      <div class="field"><label>Type</label><select id="f-dt">
+        <option value="event"${(d.type||'event')==='event'?' selected':''}>Event</option>
+        <option value="deadline"${d.type==='deadline'?' selected':''}>Deadline</option>
+        <option value="milestone"${d.type==='milestone'?' selected':''}>Milestone</option>
+        <option value="info"${d.type==='info'?' selected':''}>Info</option>
+      </select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDate('${id||''}')">Save</button>
+    </div>`);
+}
+
+window.saveDate = async id => {
+  const h=sbCur();
+  const label=document.getElementById('f-dl').value.trim(), date=document.getElementById('f-dd').value;
+  if(!label||!date) return;
+  const type=document.getElementById('f-dt').value;
+  closeModal();
+  await withLoad(async () => {
+    if(DEMO){
+      const obj={id:id||uid(),label,date,type};
+      if(id){const i=h.dates.findIndex(x=>x.id===id);h.dates[i]=obj;}else h.dates.push(obj);
+      saveDemo();
+    } else {
+      if(id) await sbFetch(`dates?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({label,date,type})});
+      else await sbFetch('dates',{method:'POST',body:JSON.stringify({hackathon_id:h.id,label,date,type})});
+    }
+  });
+};
+
+window.delDate = async id => {
+  const h=sbCur();
+  await withLoad(async () => {
+    if(DEMO){h.dates=h.dates.filter(x=>x.id!==id);saveDemo();}
+    else await sbFetch(`dates?id=eq.${id}`,{method:'DELETE',prefer:''});
+  });
+};
+
+// Tasks
+function taskModal(id) {
+  const h=sbCur(); const tasks=sbTasks(h.id); const t=id?tasks.find(x=>x.id===id):{};
+  const members=sbTeam(h.id);
+  showModal(`<h3>${id?'Edit task':'Add task'}</h3>
+    <div class="field"><label>Task</label><input id="f-tt" value="${t.title||''}"></div>
+    <div class="field-row">
+      <div class="field"><label>Assign to</label><select id="f-tw">
+        <option value="">Unassigned</option>
+        <option value="All"${(t.who||t.assigned_to)==='All'?' selected':''}>All</option>
+        ${members.map(m=>`<option value="${m.name}"${(t.who||t.assigned_to)===m.name?' selected':''}>${m.name}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Priority</label><select id="f-tp">
+        <option value="high"${(t.pri||t.priority||'med')==='high'?' selected':''}>High</option>
+        <option value="med"${(t.pri||t.priority||'med')==='med'?' selected':''}>Medium</option>
+        <option value="low"${(t.pri||t.priority)==='low'?' selected':''}>Low</option>
+      </select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTask('${id||''}')">Save</button>
+    </div>`);
+}
+
+window.saveTask = async id => {
+  const h=sbCur(); const tasks=sbTasks(h.id);
+  const title=document.getElementById('f-tt').value.trim(); if(!title) return;
+  const assigned_to=document.getElementById('f-tw').value, priority=document.getElementById('f-tp').value;
+  const wasDone=id?(tasks.find(x=>x.id===id)||{}).done:false;
+  closeModal();
+  await withLoad(async () => {
+    if(DEMO){
+      const obj={id:id||uid(),title,who:assigned_to,pri:priority,done:wasDone};
+      if(id){const i=h.tasks.findIndex(x=>x.id===id);h.tasks[i]=obj;}else h.tasks.push(obj);
+      saveDemo();
+    } else {
+      if(id) await sbFetch(`tasks?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({title,assigned_to,priority})});
+      else await sbFetch('tasks',{method:'POST',body:JSON.stringify({hackathon_id:h.id,title,assigned_to,priority,done:false})});
+    }
+  });
+};
+
+window.delTask = async id => {
+  const h=sbCur();
+  await withLoad(async () => {
+    if(DEMO){h.tasks=h.tasks.filter(x=>x.id!==id);saveDemo();}
+    else await sbFetch(`tasks?id=eq.${id}`,{method:'DELETE',prefer:''});
+  });
+};
+
+window.toggleTask = async id => {
+  const h=sbCur(); const tasks=sbTasks(h.id);
+  const t=tasks.find(x=>x.id===id); if(!t) return;
+  await withLoad(async () => {
+    const newDone=!(t.done);
+    if(DEMO){t.done=newDone;saveDemo();}
+    else await sbFetch(`tasks?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({done:newDone})});
+  });
+};
+
+// Registration
+function regModal() {
+  const h=sbCur(); const r=sbReg(h.id);
+  showModal(`<h3>Registration details</h3>
+    <div class="field"><label>Status</label><select id="f-rs">
+      <option value="not_started"${r.status==='not_started'?' selected':''}>Not started</option>
+      <option value="pending"${r.status==='pending'?' selected':''}>Pending</option>
+      <option value="registered"${r.status==='registered'?' selected':''}>Registered</option>
+      <option value="cancelled"${r.status==='cancelled'?' selected':''}>Cancelled</option>
+    </select></div>
+    <div class="field-row">
+      <div class="field"><label>Team name</label><input id="f-rt" value="${r.team_name||r.team||''}"></div>
+      <div class="field"><label>Track</label><input id="f-rk" value="${r.track||''}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Reference ID</label><input id="f-rr" value="${r.ref_id||r.refId||''}"></div>
+      <div class="field"><label>Link</label><input id="f-rl" value="${r.link||''}"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="f-rn">${r.notes||''}</textarea></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveReg()">Save</button>
+    </div>`);
+}
+
+window.saveReg = async () => {
+  const h=sbCur();
+  const payload={status:document.getElementById('f-rs').value,team_name:document.getElementById('f-rt').value.trim(),track:document.getElementById('f-rk').value.trim(),ref_id:document.getElementById('f-rr').value.trim(),link:document.getElementById('f-rl').value.trim(),notes:document.getElementById('f-rn').value.trim()};
+  closeModal();
+  await withLoad(async () => {
+    if(DEMO){h.reg={...payload,team:payload.team_name,refId:payload.ref_id};saveDemo();}
+    else {
+      const existing=cache.regs[h.id];
+      if(existing) await sbFetch(`registrations?hackathon_id=eq.${h.id}`,{method:'PATCH',body:JSON.stringify(payload)});
+      else await sbFetch('registrations',{method:'POST',body:JSON.stringify({hackathon_id:h.id,...payload})});
+    }
+  });
+};
+
+// ─── BULK IMPORT ────────────────────────────────────────────────────────────────
+document.getElementById('import-btn').onclick = () => importModal();
+
+function importModal() {
+  showModal(`<h3>Bulk import hackathons</h3>
+    <div class="import-tabs">
+      <button class="import-tab active" onclick="switchTab('csv',this)"><i class="ti ti-file-text" style="font-size:13px"></i> CSV / File</button>
+      <button class="import-tab" onclick="switchTab('json',this)"><i class="ti ti-code" style="font-size:13px"></i> Paste JSON</button>
+      <button class="import-tab" onclick="switchTab('form',this)"><i class="ti ti-forms" style="font-size:13px"></i> Form</button>
+    </div>
+
+    <div class="import-pane active" id="pane-csv">
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;">Upload a CSV with columns: <code>name, description, tags</code> (tags pipe-separated). One row per hackathon.</p>
+      <div style="border:1.5px dashed var(--border-md);border-radius:var(--r-md);padding:20px;text-align:center;cursor:pointer;" onclick="document.getElementById('csv-file').click()">
+        <i class="ti ti-upload" style="font-size:22px;display:block;margin-bottom:6px;color:var(--text-2)"></i>
+        <span style="font-size:13px;color:var(--text-2)">Click to choose CSV file</span>
+        <input type="file" id="csv-file" accept=".csv" style="display:none" onchange="previewCSV(this)">
+      </div>
+      <div id="csv-preview" style="margin-top:12px;"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="csv-import-btn" disabled onclick="runCSVImport()"><i class="ti ti-file-import"></i> Import</button>
+      </div>
+    </div>
+
+    <div class="import-pane" id="pane-json">
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;">Paste a JSON array. Each object may include <code>name</code>, <code>description</code>, <code>tags</code>, <code>team</code>, <code>dates</code>, <code>tasks</code>.</p>
+      <textarea id="json-input" style="height:160px;font-family:monospace;font-size:12px;" placeholder='[{"name":"HackX","description":"…","tags":["AI"],"team":[{"name":"Sam","role":"Dev","email":""}]}]'></textarea>
+      <div id="json-err" style="font-size:12px;color:var(--danger-text);margin-top:6px;"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="runJSONImport()"><i class="ti ti-file-import"></i> Import</button>
+      </div>
+    </div>
+
+    <div class="import-pane" id="pane-form">
+      <div id="form-hacks"></div>
+      <button class="btn btn-sm" onclick="addFormHack()" style="margin-bottom:12px;"><i class="ti ti-plus"></i> Add another hackathon</button>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="runFormImport()"><i class="ti ti-file-import"></i> Import all</button>
+      </div>
+    </div>
+  `);
+
+  // Seed one form card
+  addFormHack();
+}
+
+window.switchTab = (tab, btn) => {
+  document.querySelectorAll('.import-tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.import-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pane-'+tab).classList.add('active');
+};
+
+// CSV
+let csvParsed = [];
+window.previewCSV = async file => {
+  const text = await file.files[0].text();
+  const lines = text.trim().split(/\r?\n/);
+  const headers = lines[0].split(',').map(h=>h.trim().toLowerCase());
+  csvParsed = lines.slice(1).map(line => {
+    const vals = line.split(','); const obj = {};
+    headers.forEach((h,i) => { obj[h] = (vals[i]||'').trim().replace(/^"|"$/g,''); });
+    return { name:obj.name||'Unnamed', description:obj.description||obj.desc||'', tags:(obj.tags||'').split('|').map(t=>t.trim()).filter(Boolean) };
+  }).filter(h=>h.name&&h.name!=='Unnamed');
+
+  const prev = document.getElementById('csv-preview');
+  prev.innerHTML = csvParsed.length ?
+    `<p style="font-size:12px;color:var(--text-2);margin-bottom:6px;">${csvParsed.length} hackathon${csvParsed.length>1?'s':''} found:</p>` +
+    csvParsed.map(h=>`<div class="hack-card-mini"><div class="hc-name">${h.name}</div><div class="hc-sub">${h.tags.length?h.tags.join(', '):'No tags'}</div></div>`).join('') :
+    `<p style="font-size:12px;color:var(--danger-text);">No valid rows found. Check columns: name, description, tags</p>`;
+  document.getElementById('csv-import-btn').disabled = !csvParsed.length;
+};
+
+window.runCSVImport = async () => {
+  if (!csvParsed.length) return;
+  closeModal();
+  await importHackathons(csvParsed);
+};
+
+// JSON
+window.runJSONImport = async () => {
+  const raw = document.getElementById('json-input').value.trim();
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch(e) { document.getElementById('json-err').textContent = 'Invalid JSON: ' + e.message; return; }
+  if (!Array.isArray(parsed)) { document.getElementById('json-err').textContent = 'Must be a JSON array'; return; }
+  closeModal();
+  await importHackathons(parsed);
+};
+
+// Form
+let formHackCount = 0;
+window.addFormHack = () => {
+  const n = ++formHackCount;
+  const div = document.createElement('div');
+  div.className='hack-card-mini'; div.id='fh-'+n; div.style.marginBottom='10px';
+  div.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:12px;font-weight:500;color:var(--text-2);">Hackathon ${n}</span>
+      ${n>1?`<button class="btn-ghost btn btn-danger btn-sm" onclick="document.getElementById('fh-${n}').remove()"><i class="ti ti-x"></i></button>`:''}
+    </div>
+    <div class="field" style="margin-bottom:8px;"><input id="fhn-${n}" placeholder="Name *"></div>
+    <div class="field" style="margin-bottom:8px;"><input id="fhd-${n}" placeholder="Description"></div>
+    <div class="field" style="margin-bottom:0;"><input id="fht-${n}" placeholder="Tags (comma-separated)"></div>`;
+  document.getElementById('form-hacks').appendChild(div);
+};
+
+window.runFormImport = async () => {
+  const items = [];
+  document.querySelectorAll('[id^="fhn-"]').forEach(el => {
+    const n = el.id.replace('fhn-','');
+    const name = el.value.trim(); if (!name) return;
+    const desc = (document.getElementById('fhd-'+n)||{}).value||'';
+    const tags = ((document.getElementById('fht-'+n)||{}).value||'').split(',').map(t=>t.trim()).filter(Boolean);
+    items.push({name,description:desc,tags});
+  });
+  if (!items.length) { toast('Enter at least one hackathon name'); return; }
+  closeModal();
+  await importHackathons(items);
+};
+
+// Core import function
+async function importHackathons(list) {
+  let count = 0;
+  for (const item of list) {
+    const name = item.name||'Unnamed';
+    const desc = item.description||item.desc||'';
+    const tags = item.tags||[];
+    try {
+      if (DEMO) {
+        const h = { id:uid(), name, description:desc, tags, team:item.team||[], dates:item.dates||[], tasks:item.tasks||[], reg:{status:'not_started',team:'',track:'',refId:'',link:'',notes:''} };
+        S.hackathons.push(h);
+        if (!S.cur) S.cur = h.id;
+        saveDemo();
+      } else {
+        const [newH] = await sbFetch('hackathons',{method:'POST',body:JSON.stringify({name,description:desc,tags})});
+        if (!S.cur) S.cur = newH.id;
+        await sbFetch('registrations',{method:'POST',body:JSON.stringify({hackathon_id:newH.id,status:'not_started'})});
+        // Import nested team/dates/tasks if provided
+        if ((item.team||[]).length) {
+          await sbFetch('team_members',{method:'POST',prefer:'return=minimal',body:JSON.stringify(item.team.map(m=>({hackathon_id:newH.id,name:m.name||'',role:m.role||'',email:m.email||''})))});
+        }
+        if ((item.dates||[]).length) {
+          await sbFetch('dates',{method:'POST',prefer:'return=minimal',body:JSON.stringify(item.dates.map(d=>({hackathon_id:newH.id,label:d.label||'',date:d.date||'',type:d.type||'event'})))});
+        }
+        if ((item.tasks||[]).length) {
+          await sbFetch('tasks',{method:'POST',prefer:'return=minimal',body:JSON.stringify(item.tasks.map(t=>({hackathon_id:newH.id,title:t.title||'',assigned_to:t.who||t.assigned_to||'',priority:t.pri||t.priority||'med',done:t.done||false})))});
+        }
+      }
+      count++;
+    } catch(e) { toast(`Failed to import "${name}": ${e.message}`); }
+  }
+  if (!DEMO) await loadAllHackathons();
+  render();
+  toast(`✓ Imported ${count} hackathon${count!==1?'s':''}`);
+}
+
+// ─── Boot ───────────────────────────────────────────────────────────────────────
+async function bootApp() {
+  document.getElementById('config-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'grid';
+
+  if (DEMO) {
+    loadDemo();
+    setConn(true);
+    document.getElementById('conn-text').textContent = 'Demo mode';
+    render();
+  } else {
+    document.getElementById('conn-text').textContent = 'Connecting…';
+    await loadAllHackathons();
+    if (cache.hackathons.length) S.cur = cache.hackathons[0].id;
+    render();
+  }
+}
+
+// Sidebar events
+document.getElementById('hack-sel').onchange = e => { S.cur = e.target.value; render(); };
+document.getElementById('sidebar-nav').onclick = e => {
+  const btn = e.target.closest('.nav-item');
+  if (btn && btn.dataset.view) { VIEW = btn.dataset.view; render(); }
+};
+document.getElementById('new-hack-btn').onclick = () => hackModal(null);
+
+// Auto-load if config saved
+(function init() {
+  try {
+    const cfg = localStorage.getItem(LS_CFG);
+    if (cfg) { const {url,key}=JSON.parse(cfg); SB_URL=url; SB_KEY=key; bootApp(); return; }
+  } catch(e) {}
+  // Show config screen
+})();
+</script>
+</body>
+</html>
