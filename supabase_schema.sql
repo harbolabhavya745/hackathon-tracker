@@ -1,11 +1,12 @@
 -- ============================================================
--- Hackathon Tracker — Supabase Schema
+-- Hackathon Tracker — Supabase Schema (Updated for Auth/RLS)
 -- Run this in your Supabase SQL Editor
 -- ============================================================
 
 -- 1. hackathons
 create table if not exists hackathons (
   id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) default auth.uid(),
   name        text not null,
   description text not null default '',
   tags        text[] not null default '{}',
@@ -77,22 +78,41 @@ create trigger trg_hackathons_updated_at
   before update on hackathons
   for each row execute function set_updated_at();
 
--- ── Row Level Security (enable, then open for authenticated) ──
+-- ── Row Level Security ──
 alter table hackathons   enable row level security;
 alter table registrations enable row level security;
 alter table team_members  enable row level security;
 alter table dates         enable row level security;
 alter table tasks         enable row level security;
 
--- Allow all operations for authenticated users (adjust as needed)
-create policy "auth_all_hackathons"   on hackathons   for all to authenticated using (true) with check (true);
-create policy "auth_all_registrations" on registrations for all to authenticated using (true) with check (true);
-create policy "auth_all_members"      on team_members  for all to authenticated using (true) with check (true);
-create policy "auth_all_dates"        on dates         for all to authenticated using (true) with check (true);
-create policy "auth_all_tasks"        on tasks         for all to authenticated using (true) with check (true);
+-- Policies: Only allow users to see/edit their own data
+drop policy if exists "users_all_hackathons" on hackathons;
+create policy "users_all_hackathons" on hackathons for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- ── Sample CSV template columns (for bulk import reference) ─
--- hackathons.csv:   name, description, tags (pipe-separated)
--- team_members.csv: hackathon_name, name, role, email
--- dates.csv:        hackathon_name, label, date (YYYY-MM-DD), type
--- tasks.csv:        hackathon_name, title, assigned_to, priority
+drop policy if exists "users_all_registrations" on registrations;
+create policy "users_all_registrations" on registrations for all to authenticated using (
+  exists (select 1 from hackathons where id = registrations.hackathon_id and user_id = auth.uid())
+) with check (
+  exists (select 1 from hackathons where id = registrations.hackathon_id and user_id = auth.uid())
+);
+
+drop policy if exists "users_all_members" on team_members;
+create policy "users_all_members" on team_members for all to authenticated using (
+  exists (select 1 from hackathons where id = team_members.hackathon_id and user_id = auth.uid())
+) with check (
+  exists (select 1 from hackathons where id = team_members.hackathon_id and user_id = auth.uid())
+);
+
+drop policy if exists "users_all_dates" on dates;
+create policy "users_all_dates" on dates for all to authenticated using (
+  exists (select 1 from hackathons where id = dates.hackathon_id and user_id = auth.uid())
+) with check (
+  exists (select 1 from hackathons where id = dates.hackathon_id and user_id = auth.uid())
+);
+
+drop policy if exists "users_all_tasks" on tasks;
+create policy "users_all_tasks" on tasks for all to authenticated using (
+  exists (select 1 from hackathons where id = tasks.hackathon_id and user_id = auth.uid())
+) with check (
+  exists (select 1 from hackathons where id = tasks.hackathon_id and user_id = auth.uid())
+);

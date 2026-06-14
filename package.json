@@ -1,0 +1,31 @@
+{
+  "name": "hackathon-tracker",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A modular web app to manage hackathon participation — track registrations, team members, deadlines, and tasks, powered by Supabase.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harbolabhavya745/hackathon-tracker.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/harbolabhavya745/hackathon-tracker/issues"
+  },
+  "homepage": "https://github.com/harbolabhavya745/hackathon-tracker#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.43.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11",
+    "lucide-static": "^0.378.0"
+  }
+}
