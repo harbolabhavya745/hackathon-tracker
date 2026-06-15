@@ -3,6 +3,13 @@
 -- Run this in your Supabase SQL Editor
 -- ============================================================
 
+-- Cleanup existing tables (order matters for foreign keys)
+drop table if exists tasks;
+drop table if exists dates;
+drop table if exists team_members;
+drop table if exists registrations;
+drop table if exists hackathons;
+
 -- 1. hackathons
 create table if not exists hackathons (
   id          uuid primary key default gen_random_uuid(),

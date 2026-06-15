@@ -1,5 +1,6 @@
 export interface Hackathon {
   id: string;
+  user_id: string;
   name: string;
   description: string;
   tags: string[];

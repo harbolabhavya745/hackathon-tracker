@@ -55,18 +55,13 @@ Credentials are saved to `localStorage` so you only need to enter them once per 
 
 ## Row Level Security
 
-The schema enables RLS on all tables and creates a permissive policy for `authenticated` users. For a personal/team setup this is sufficient. If you expose the app publicly, you should tighten policies:
+The schema enables RLS on all tables and creates restricted policies that ensure users can only access their own data (linked via `user_id`).
 
-```sql
--- Example: restrict to the authenticated user's own data
--- Add a user_id column and reference auth.uid()
-alter table hackathons add column user_id uuid references auth.users(id);
-
-create policy "own_hackathons" on hackathons
-  for all to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
-```
+To test this:
+1. Sign up a new user in your app.
+2. Create some hackathons.
+3. Sign out and sign in with a *different* user.
+4. Verify that you cannot see the first user's hackathons.
 
 ---
 
