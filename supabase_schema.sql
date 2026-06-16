@@ -92,34 +92,49 @@ alter table team_members  enable row level security;
 alter table dates         enable row level security;
 alter table tasks         enable row level security;
 
--- Policies: Only allow users to see/edit their own data
+-- Policies: Allow owners and team members to see/edit data
+create or replace function is_team_member(h_id uuid)
+returns boolean as $$
+begin
+  return exists (
+    select 1 from hackathons where id = h_id and user_id = auth.uid()
+  ) or exists (
+    select 1 from team_members where hackathon_id = h_id and email = auth.jwt() ->> 'email'
+  );
+end;
+$$ language plpgsql security definer;
+
 drop policy if exists "users_all_hackathons" on hackathons;
-create policy "users_all_hackathons" on hackathons for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "users_all_hackathons" on hackathons for all to authenticated using (
+  auth.uid() = user_id or exists (
+    select 1 from team_members where hackathon_id = hackathons.id and email = auth.jwt() ->> 'email'
+  )
+) with check (auth.uid() = user_id);
 
 drop policy if exists "users_all_registrations" on registrations;
 create policy "users_all_registrations" on registrations for all to authenticated using (
-  exists (select 1 from hackathons where id = registrations.hackathon_id and user_id = auth.uid())
+  is_team_member(hackathon_id)
 ) with check (
-  exists (select 1 from hackathons where id = registrations.hackathon_id and user_id = auth.uid())
+  is_team_member(hackathon_id)
 );
 
 drop policy if exists "users_all_members" on team_members;
 create policy "users_all_members" on team_members for all to authenticated using (
-  exists (select 1 from hackathons where id = team_members.hackathon_id and user_id = auth.uid())
+  is_team_member(hackathon_id)
 ) with check (
-  exists (select 1 from hackathons where id = team_members.hackathon_id and user_id = auth.uid())
+  is_team_member(hackathon_id)
 );
 
 drop policy if exists "users_all_dates" on dates;
 create policy "users_all_dates" on dates for all to authenticated using (
-  exists (select 1 from hackathons where id = dates.hackathon_id and user_id = auth.uid())
+  is_team_member(hackathon_id)
 ) with check (
-  exists (select 1 from hackathons where id = dates.hackathon_id and user_id = auth.uid())
+  is_team_member(hackathon_id)
 );
 
 drop policy if exists "users_all_tasks" on tasks;
 create policy "users_all_tasks" on tasks for all to authenticated using (
-  exists (select 1 from hackathons where id = tasks.hackathon_id and user_id = auth.uid())
+  is_team_member(hackathon_id)
 ) with check (
-  exists (select 1 from hackathons where id = tasks.hackathon_id and user_id = auth.uid())
+  is_team_member(hackathon_id)
 );

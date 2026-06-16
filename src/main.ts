@@ -1,5 +1,6 @@
 import './styles/main.css';
 import { authApi } from './api/auth';
+import { supabase } from './api/supabase';
 import { hackathonApi, teamApi, datesApi, tasksApi, registrationApi } from './api/hackathons';
 import { renderAuth } from './components/Auth';
 import { Hackathon, Registration, TeamMember, DateItem, Task } from './types';
@@ -38,6 +39,7 @@ async function init() {
     state.user = session?.user || null;
     if (state.user) {
       await loadData();
+      setupSubscriptions();
     }
     render();
   });
@@ -46,8 +48,23 @@ async function init() {
   state.user = session?.user || null;
   if (state.user) {
     await loadData();
+    setupSubscriptions();
   }
   render();
+}
+
+function setupSubscriptions() {
+  // Clear any existing subscriptions (simple way for this prototype)
+  supabase.removeAllChannels();
+
+  supabase
+    .channel('db-changes')
+    .on('postgres_changes', { event: '*', schema: 'public' }, async () => {
+      // Reload everything to keep state consistent across teammates
+      await loadData();
+      render();
+    })
+    .subscribe();
 }
 
 async function loadData() {
