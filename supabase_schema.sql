@@ -143,28 +143,28 @@ create policy "users_all_hackathons" on hackathons for all to authenticated usin
 
 -- 2. Registrations
 create policy "users_all_registrations" on registrations for all to authenticated using (
-  is_team_member(hackathon_id)
+  exists (select 1 from hackathons where id = hackathon_id)
 ) with check (
-  is_team_member(hackathon_id)
+  exists (select 1 from hackathons where id = hackathon_id)
 );
 
 -- 3. Team Members
 create policy "users_all_members" on team_members for all to authenticated using (
-  is_team_member(hackathon_id)
+  exists (select 1 from hackathons where id = hackathon_id)
 ) with check (
-  is_team_member(hackathon_id)
+  exists (select 1 from hackathons where id = hackathon_id)
 );
 
 -- 4. Dates
 create policy "users_all_dates" on dates for all to authenticated using (
-  is_team_member(hackathon_id)
+  exists (select 1 from hackathons where id = hackathon_id)
 ) with check (
-  is_team_member(hackathon_id)
+  exists (select 1 from hackathons where id = hackathon_id)
 );
 
 -- 5. Tasks
 create policy "users_all_tasks" on tasks for all to authenticated using (
-  is_team_member(hackathon_id)
+  exists (select 1 from hackathons where id = hackathon_id)
 ) with check (
-  is_team_member(hackathon_id)
+  exists (select 1 from hackathons where id = hackathon_id)
 );

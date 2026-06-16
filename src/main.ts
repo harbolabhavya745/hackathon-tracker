@@ -92,13 +92,17 @@ function setupSubscriptions() {
   activeChannel = supabase
     .channel('db-changes')
     .on('postgres_changes', { event: '*', schema: 'public' }, async (payload) => {
-      console.log('Syncing change from:', payload.table);
+      console.log('Real-time sync triggered:', payload.table);
       // Re-load all data to ensure cache is perfectly synced
       await loadData();
+      if (state.currentHackathonId) {
+        await loadHackathonDetails(state.currentHackathonId);
+      }
       render();
     })
     .subscribe();
 }
+
 
 async function loadData() {
   try {
