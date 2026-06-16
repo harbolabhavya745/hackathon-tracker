@@ -1,6 +1,6 @@
 import './styles/main.css';
 import { authApi } from './api/auth';
-import { supabase } from './api/supabase';
+import { supabase, isSupabaseConfigured } from './api/supabase';
 import { hackathonApi, teamApi, datesApi, tasksApi, registrationApi } from './api/hackathons';
 import { renderAuth } from './components/Auth';
 import { Hackathon, Registration, TeamMember, DateItem, Task } from './types';
@@ -35,13 +35,28 @@ let state: AppState = {
 const appContainer = document.getElementById('app')!;
 
 async function init() {
-  // Fail-safe: If nothing renders in 3 seconds, force a render
+  if (!isSupabaseConfigured()) {
+    appContainer.innerHTML = `
+      <div id="config-screen">
+        <div class="config-badge" style="background:var(--danger-bg);color:var(--danger-text)">Configuration Missing</div>
+        <h2>Supabase Not Found</h2>
+        <p>The application credentials (VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY) are missing or invalid.</p>
+        <p>Please check your Vercel Environment Variables or local .env file and redeploy.</p>
+        <div style="margin-top:24px;padding-top:16px;border-top:0.5px solid var(--border);text-align:center;">
+          <button class="btn btn-primary" onclick="window.location.reload()">Retry Connection</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Fail-safe: If nothing renders in 5 seconds, force a render
   const renderTimeout = setTimeout(() => {
     if (appContainer.innerHTML === '') {
       console.warn('Initialization timeout. Forcing render...');
       render();
     }
-  }, 3000);
+  }, 5000);
 
   // 1. Listen for auth changes
   authApi.onAuthStateChange(async (event, session) => {
@@ -77,14 +92,15 @@ async function init() {
   }
 }
 
-function setupSubscriptions() {
-  // Clear any existing subscriptions (simple way for this prototype)
-  supabase.removeAllChannels();
+let activeSubscription: any = null;
 
-  supabase
+function setupSubscriptions() {
+  if (!state.user || activeSubscription) return;
+
+  activeSubscription = supabase
     .channel('db-changes')
-    .on('postgres_changes', { event: '*', schema: 'public' }, async () => {
-      // Reload everything to keep state consistent across teammates
+    .on('postgres_changes', { event: '*', schema: 'public' }, async (payload) => {
+      console.log('Real-time sync triggered:', payload.table);
       await loadData();
       render();
     })

@@ -3,6 +3,14 @@
 -- Run this in your Supabase SQL Editor
 -- ============================================================
 
+-- ── Enable Realtime for all tables ──────────────────────────
+-- This is what allows Supabase to 'broadcast' changes to the frontend
+begin;
+  drop publication if exists supabase_realtime;
+  create publication supabase_realtime for table 
+    hackathons, registrations, team_members, dates, tasks;
+commit;
+
 -- ── Step 1: Drop policies first (they depend on tables & functions) ──
 drop policy if exists "users_all_hackathons"    on hackathons;
 drop policy if exists "users_all_registrations" on registrations;
