@@ -55,7 +55,7 @@ export const registrationApi = {
   async upsert(registration: Partial<Registration>) {
     const { data, error } = await supabase
       .from('registrations')
-      .upsert(registration)
+      .upsert(registration, { onConflict: 'hackathon_id' })
       .select()
       .single();
     if (error) throw error;
