@@ -126,45 +126,37 @@ $$ language plpgsql security definer;
 
 -- ── Step 8: RLS Policies ───────────────────────────────────
 
--- 1. Hackathons (Grant teammates access to view and update)
+-- 1. Hackathons
 create policy "users_all_hackathons" on hackathons for all to authenticated using (
-  auth.uid() = user_id or exists (
-    select 1 from team_members
-    where hackathon_id = id
-    and lower(email) = lower(auth.jwt() ->> 'email')
-  )
+  is_team_member(id)
 ) with check (
-  auth.uid() = user_id or exists (
-    select 1 from team_members
-    where hackathon_id = id
-    and lower(email) = lower(auth.jwt() ->> 'email')
-  )
+  auth.uid() = user_id -- Only owners can create/update hackathons themselves
 );
 
 -- 2. Registrations
 create policy "users_all_registrations" on registrations for all to authenticated using (
-  exists (select 1 from hackathons where id = hackathon_id)
+  is_team_member(hackathon_id)
 ) with check (
-  exists (select 1 from hackathons where id = hackathon_id)
+  is_team_member(hackathon_id)
 );
 
 -- 3. Team Members
 create policy "users_all_members" on team_members for all to authenticated using (
-  exists (select 1 from hackathons where id = hackathon_id)
+  is_team_member(hackathon_id)
 ) with check (
-  exists (select 1 from hackathons where id = hackathon_id)
+  is_team_member(hackathon_id)
 );
 
 -- 4. Dates
 create policy "users_all_dates" on dates for all to authenticated using (
-  exists (select 1 from hackathons where id = hackathon_id)
+  is_team_member(hackathon_id)
 ) with check (
-  exists (select 1 from hackathons where id = hackathon_id)
+  is_team_member(hackathon_id)
 );
 
 -- 5. Tasks
 create policy "users_all_tasks" on tasks for all to authenticated using (
-  exists (select 1 from hackathons where id = hackathon_id)
+  is_team_member(hackathon_id)
 ) with check (
-  exists (select 1 from hackathons where id = hackathon_id)
+  is_team_member(hackathon_id)
 );
