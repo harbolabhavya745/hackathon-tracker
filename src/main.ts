@@ -221,7 +221,10 @@ function renderOverview(h: Hackathon) {
     <div class="prog-label">${doneTasks} of ${tasks.length} tasks completed</div>
 
     <div class="panel">
-      <div class="panel-head"><div class="panel-head-title">About ${h.name}</div></div>
+      <div class="panel-head">
+        <div class="panel-head-title">About ${h.name}</div>
+        ${h.user_id === state.user.id ? '<button class="btn btn-sm" id="edit-hack-btn"><i class="ti ti-edit"></i> Edit</button>' : ''}
+      </div>
       <div class="about-body">${h.description || 'No description provided.'}</div>
       <div class="about-tags">${h.tags.map(t => `<span class="badge b-gray">${t}</span>`).join('')}</div>
     </div>
@@ -550,6 +553,38 @@ function setupEventListeners() {
         closeModal();
         render();
         toast('Registration updated!');
+      } catch (e: any) {
+        toast('Failed: ' + e.message);
+      }
+    });
+  });
+
+  // Edit Hackathon
+  document.getElementById('edit-hack-btn')?.addEventListener('click', () => {
+    const h = state.hackathons.find(x => x.id === state.currentHackathonId);
+    if (!h) return;
+    showModal(`
+      <h3>Edit Hackathon</h3>
+      <div class="field"><label>Name</label><input id="e-h-name" value="${h.name}"></div>
+      <div class="field"><label>Description</label><textarea id="e-h-desc">${h.description}</textarea></div>
+      <div class="field"><label>Tags (comma separated)</label><input id="e-h-tags" value="${h.tags.join(', ')}"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="save-hack-btn">Save</button>
+      </div>
+    `);
+
+    document.getElementById('save-hack-btn')?.addEventListener('click', async () => {
+      const name = (document.getElementById('e-h-name') as HTMLInputElement).value;
+      const description = (document.getElementById('e-h-desc') as HTMLTextAreaElement).value;
+      const tags = (document.getElementById('e-h-tags') as HTMLInputElement).value.split(',').map(t => t.trim()).filter(t => t);
+      try {
+        const updated = await hackathonApi.update(h.id, { name, description, tags });
+        const idx = state.hackathons.findIndex(x => x.id === h.id);
+        if (idx !== -1) state.hackathons[idx] = updated;
+        closeModal();
+        render();
+        toast('Hackathon updated!');
       } catch (e: any) {
         toast('Failed: ' + e.message);
       }
