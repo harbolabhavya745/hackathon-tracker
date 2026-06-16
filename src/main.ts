@@ -56,7 +56,7 @@ async function init() {
   }, 5000);
 
   // 1. Listen for auth changes
-  authApi.onAuthStateChange(async (event, session) => {
+  authApi.onAuthStateChange(async (_event, session) => {
     clearTimeout(renderTimeout);
     state.user = session?.user || null;
 
