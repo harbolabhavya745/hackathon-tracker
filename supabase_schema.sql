@@ -4,24 +4,24 @@
 -- ============================================================
 
 -- ── Enable Realtime for all tables ──────────────────────────
--- This is what allows Supabase to 'broadcast' changes to the frontend
+-- We do this at the very beginning to ensure it's registered
 begin;
   drop publication if exists supabase_realtime;
   create publication supabase_realtime for table 
     hackathons, registrations, team_members, dates, tasks;
 commit;
 
--- ── Step 1: Drop policies first (they depend on tables & functions) ──
+-- ── Step 1: Drop policies first ──
 drop policy if exists "users_all_hackathons"    on hackathons;
 drop policy if exists "users_all_registrations" on registrations;
 drop policy if exists "users_all_members"       on team_members;
 drop policy if exists "users_all_dates"         on dates;
 drop policy if exists "users_all_tasks"         on tasks;
 
--- ── Step 2: Drop function (depends on team_members) ──
+-- ── Step 2: Drop function ──
 drop function if exists is_team_member(uuid);
 
--- ── Step 3: Drop tables (now safe, no dependents) ──
+-- ── Step 3: Drop tables (order matters) ──
 drop table if exists tasks;
 drop table if exists dates;
 drop table if exists team_members;
@@ -41,7 +41,7 @@ create table hackathons (
   updated_at  timestamptz not null default now()
 );
 
--- 2. registrations (1-to-1 with hackathon)
+-- 2. registrations
 create table registrations (
   id           uuid primary key default gen_random_uuid(),
   hackathon_id uuid not null references hackathons(id) on delete cascade,
@@ -94,42 +94,39 @@ create index idx_members_hack on team_members(hackathon_id);
 create index idx_dates_hack   on dates(hackathon_id);
 create index idx_tasks_hack   on tasks(hackathon_id);
 
--- ── Step 6: Auto-update updated_at ────────────────────────
-create or replace function set_updated_at()
-returns trigger language plpgsql as $$
-begin new.updated_at = now(); return new; end;
-$$;
-
-drop trigger if exists trg_hackathons_updated_at on hackathons;
-create trigger trg_hackathons_updated_at
-  before update on hackathons
-  for each row execute function set_updated_at();
-
--- ── Step 7: Enable RLS ─────────────────────────────────────
+-- ── Step 6: Enable RLS ─────────────────────────────────────
 alter table hackathons    enable row level security;
 alter table registrations enable row level security;
 alter table team_members  enable row level security;
 alter table dates         enable row level security;
 alter table tasks         enable row level security;
 
--- ── Step 8: Helper function ────────────────────────────────
+-- ── Step 7: Simplified Helper function ─────────────────────
 create or replace function is_team_member(h_id uuid)
 returns boolean as $$
+declare
+  user_email text;
 begin
+  -- Get user email from JWT
+  user_email := lower(auth.jwt() ->> 'email');
+  
+  -- Check if owner
   if exists (select 1 from hackathons where id = h_id and user_id = auth.uid()) then
     return true;
   end if;
+  
+  -- Check if teammate
   return exists (
     select 1 from team_members
     where hackathon_id = h_id
-    and lower(email) = lower(auth.jwt() ->> 'email')
+    and lower(email) = user_email
   );
 end;
 $$ language plpgsql security definer;
 
--- ── Step 9: RLS Policies ───────────────────────────────────
+-- ── Step 8: RLS Policies ───────────────────────────────────
 
--- 1. Hackathons (inline check — avoids circular dependency with is_team_member)
+-- 1. Hackathons (Grant teammates access to view and update)
 create policy "users_all_hackathons" on hackathons for all to authenticated using (
   auth.uid() = user_id or exists (
     select 1 from team_members

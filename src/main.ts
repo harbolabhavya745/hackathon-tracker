@@ -50,27 +50,19 @@ async function init() {
     return;
   }
 
-  // Fail-safe: If nothing renders in 5 seconds, force a render
+  // Fail-safe: Force render if stuck
   const renderTimeout = setTimeout(() => {
-    if (appContainer.innerHTML === '') {
-      console.warn('Initialization timeout. Forcing render...');
-      render();
-    }
+    if (appContainer.innerHTML === '') render();
   }, 5000);
 
   // 1. Listen for auth changes
   authApi.onAuthStateChange(async (event, session) => {
     clearTimeout(renderTimeout);
-    const userChanged = state.user?.id !== session?.user?.id;
     state.user = session?.user || null;
 
-    if (state.user && (userChanged || event === 'SIGNED_IN')) {
-      try {
-        await loadData();
-        setupSubscriptions();
-      } catch (e) {
-        console.error('Data load failed:', e);
-      }
+    if (state.user) {
+      await loadData();
+      setupSubscriptions();
     }
     render();
   });
@@ -84,7 +76,7 @@ async function init() {
       setupSubscriptions();
     }
   } catch (e) {
-    console.error('Initial session fetch failed:', e);
+    console.error('Session error:', e);
     state.user = null;
   } finally {
     clearTimeout(renderTimeout);
@@ -92,15 +84,16 @@ async function init() {
   }
 }
 
-let activeSubscription: any = null;
+let activeChannel: any = null;
 
 function setupSubscriptions() {
-  if (!state.user || activeSubscription) return;
+  if (!state.user || activeChannel) return;
 
-  activeSubscription = supabase
+  activeChannel = supabase
     .channel('db-changes')
     .on('postgres_changes', { event: '*', schema: 'public' }, async (payload) => {
-      console.log('Real-time sync triggered:', payload.table);
+      console.log('Syncing change from:', payload.table);
+      // Re-load all data to ensure cache is perfectly synced
       await loadData();
       render();
     })
@@ -115,9 +108,6 @@ async function loadData() {
       state.currentHackathonId = hs[0].id;
     }
     
-    // In a real app, you might want to load these lazily per hackathon
-    // but for now let's stick to the original "load all" pattern if manageable
-    // Actually, let's load current hackathon details
     if (state.currentHackathonId) {
       await loadHackathonDetails(state.currentHackathonId);
     }
@@ -264,7 +254,6 @@ function renderRegistration(h: Hackathon) {
   `;
 }
 
-// ... Additional render functions for Team, Dates, Tasks ...
 function renderTeam(h: Hackathon) {
   const members = state.cache.members[h.id] || [];
   return `
@@ -337,6 +326,9 @@ function renderTasks(h: Hackathon) {
 }
 
 function setupEventListeners() {
+  // Use unique IDs or clear listeners if possible. 
+  // For this simple version, we just re-attach as render() replaces the whole DOM.
+
   document.getElementById('hack-sel')?.addEventListener('change', async (e: any) => {
     state.currentHackathonId = e.target.value;
     await loadHackathonDetails(state.currentHackathonId!);
@@ -345,7 +337,7 @@ function setupEventListeners() {
 
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', (e: any) => {
-      state.currentView = e.currentTarget.dataset.view;
+      state.currentView = (e.currentTarget as HTMLElement).dataset.view!;
       render();
     });
   });
@@ -353,6 +345,10 @@ function setupEventListeners() {
   document.getElementById('logout-btn')?.addEventListener('click', async () => {
     await authApi.signOut();
     state.user = null;
+    if (activeChannel) {
+      activeChannel.unsubscribe();
+      activeChannel = null;
+    }
     render();
   });
 
@@ -389,7 +385,7 @@ function setupEventListeners() {
   // Task toggle
   document.querySelectorAll('.check').forEach(el => {
     el.addEventListener('click', async (e: any) => {
-      const id = e.currentTarget.dataset.id;
+      const id = (e.currentTarget as HTMLElement).dataset.id!;
       const hId = state.currentHackathonId!;
       const task = state.cache.tasks[hId].find(t => t.id === id)!;
       try {
@@ -451,7 +447,6 @@ function setupEventListeners() {
       </div>
     `);
     
-    // ATTACH LISTENER AFTER MODAL IS IN DOM
     document.getElementById('save-task')?.addEventListener('click', async () => {
       const title = (document.getElementById('t-title') as HTMLInputElement).value;
       const assigned_to = (document.getElementById('t-assign') as HTMLInputElement).value;
@@ -489,7 +484,6 @@ function setupEventListeners() {
       </div>
     `);
 
-    // ATTACH LISTENER AFTER MODAL IS IN DOM
     document.getElementById('save-date')?.addEventListener('click', async () => {
       const label = (document.getElementById('d-label') as HTMLInputElement).value;
       const date = (document.getElementById('d-date') as HTMLInputElement).value;
@@ -531,7 +525,6 @@ function setupEventListeners() {
       </div>
     `);
 
-    // ATTACH LISTENER AFTER MODAL IS IN DOM
     document.getElementById('save-reg')?.addEventListener('click', async () => {
       const updates = {
         hackathon_id: state.currentHackathonId!,
@@ -554,10 +547,10 @@ function setupEventListeners() {
     });
   });
 
-  // Delete Member
+  // Deletion listeners
   document.querySelectorAll('.del-member').forEach(btn => {
     btn.addEventListener('click', async (e: any) => {
-      const id = e.currentTarget.dataset.id;
+      const id = (e.currentTarget as HTMLElement).dataset.id!;
       if (!confirm('Delete this team member?')) return;
       try {
         await teamApi.delete(id);
@@ -570,10 +563,9 @@ function setupEventListeners() {
     });
   });
 
-  // Delete Date
   document.querySelectorAll('.del-date').forEach(btn => {
     btn.addEventListener('click', async (e: any) => {
-      const id = e.currentTarget.dataset.id;
+      const id = (e.currentTarget as HTMLElement).dataset.id!;
       if (!confirm('Delete this date?')) return;
       try {
         await datesApi.delete(id);
@@ -586,10 +578,9 @@ function setupEventListeners() {
     });
   });
 
-  // Delete Task
   document.querySelectorAll('.del-task').forEach(btn => {
     btn.addEventListener('click', async (e: any) => {
-      const id = e.currentTarget.dataset.id;
+      const id = (e.currentTarget as HTMLElement).dataset.id!;
       if (!confirm('Delete this task?')) return;
       try {
         await tasksApi.delete(id);
@@ -602,7 +593,6 @@ function setupEventListeners() {
     });
   });
 
-  // Delete Hackathon
   document.getElementById('del-hack-btn')?.addEventListener('click', async () => {
     const h = state.hackathons.find(x => x.id === state.currentHackathonId);
     if (!h) return;
@@ -620,11 +610,10 @@ function setupEventListeners() {
     }
   });
 
-  // Bulk Import
   document.getElementById('import-btn')?.addEventListener('click', () => {
     showModal(`
       <h3>Bulk Import</h3>
-      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px;">Paste a JSON array of hackathons. Each object can have <code>name</code>, <code>description</code>, and <code>tags</code>.</p>
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px;">Paste a JSON array of hackathons.</p>
       <textarea id="import-json" style="width:100%;height:150px;font-family:monospace;font-size:12px;" placeholder='[{"name":"HackX","description":"...","tags":["AI"]}]'></textarea>
       <div class="modal-footer">
         <button class="btn" onclick="closeModal()">Cancel</button>
