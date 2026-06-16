@@ -35,9 +35,17 @@ let state: AppState = {
 const appContainer = document.getElementById('app')!;
 
 async function init() {
-  // 1. Listen for auth changes (this handles login/logout and initial session)
+  // Fail-safe: If nothing renders in 3 seconds, force a render
+  const renderTimeout = setTimeout(() => {
+    if (appContainer.innerHTML === '') {
+      console.warn('Initialization timeout. Forcing render...');
+      render();
+    }
+  }, 3000);
+
+  // 1. Listen for auth changes
   authApi.onAuthStateChange(async (event, session) => {
-    // Only reload data if the user actually changed or it's the initial sign-in
+    clearTimeout(renderTimeout);
     const userChanged = state.user?.id !== session?.user?.id;
     state.user = session?.user || null;
 
@@ -52,7 +60,7 @@ async function init() {
     render();
   });
 
-  // 2. Try to get initial session without crashing the app
+  // 2. Initial session check
   try {
     const session = await authApi.getSession();
     state.user = session?.user || null;
@@ -64,7 +72,7 @@ async function init() {
     console.error('Initial session fetch failed:', e);
     state.user = null;
   } finally {
-    // Always render something so the user doesn't get a grey screen
+    clearTimeout(renderTimeout);
     render();
   }
 }
@@ -426,6 +434,8 @@ function setupEventListeners() {
         <button class="btn btn-primary" id="save-task">Add</button>
       </div>
     `);
+    
+    // ATTACH LISTENER AFTER MODAL IS IN DOM
     document.getElementById('save-task')?.addEventListener('click', async () => {
       const title = (document.getElementById('t-title') as HTMLInputElement).value;
       const assigned_to = (document.getElementById('t-assign') as HTMLInputElement).value;
@@ -462,6 +472,8 @@ function setupEventListeners() {
         <button class="btn btn-primary" id="save-date">Add</button>
       </div>
     `);
+
+    // ATTACH LISTENER AFTER MODAL IS IN DOM
     document.getElementById('save-date')?.addEventListener('click', async () => {
       const label = (document.getElementById('d-label') as HTMLInputElement).value;
       const date = (document.getElementById('d-date') as HTMLInputElement).value;
@@ -502,6 +514,8 @@ function setupEventListeners() {
         <button class="btn btn-primary" id="save-reg">Save</button>
       </div>
     `);
+
+    // ATTACH LISTENER AFTER MODAL IS IN DOM
     document.getElementById('save-reg')?.addEventListener('click', async () => {
       const updates = {
         hackathon_id: state.currentHackathonId!,

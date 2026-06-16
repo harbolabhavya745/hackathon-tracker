@@ -96,21 +96,32 @@ alter table tasks         enable row level security;
 create or replace function is_team_member(h_id uuid)
 returns boolean as $$
 begin
+  -- Check if owner
+  if exists (select 1 from hackathons where id = h_id and user_id = auth.uid()) then
+    return true;
+  end if;
+  -- Check if teammate (case-insensitive email)
   return exists (
-    select 1 from hackathons where id = h_id and user_id = auth.uid()
-  ) or exists (
-    select 1 from team_members where hackathon_id = h_id and email = auth.jwt() ->> 'email'
+    select 1 from team_members 
+    where hackathon_id = h_id 
+    and lower(email) = lower(auth.jwt() ->> 'email')
   );
 end;
 $$ language plpgsql security definer;
 
+-- 1. Hackathons
 drop policy if exists "users_all_hackathons" on hackathons;
 create policy "users_all_hackathons" on hackathons for all to authenticated using (
   auth.uid() = user_id or exists (
-    select 1 from team_members where hackathon_id = hackathons.id and email = auth.jwt() ->> 'email'
+    select 1 from team_members where hackathon_id = id and lower(email) = lower(auth.jwt() ->> 'email')
   )
-) with check (auth.uid() = user_id);
+) with check (
+  auth.uid() = user_id or exists (
+    select 1 from team_members where hackathon_id = id and lower(email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
+-- 2. Registrations
 drop policy if exists "users_all_registrations" on registrations;
 create policy "users_all_registrations" on registrations for all to authenticated using (
   is_team_member(hackathon_id)
@@ -118,6 +129,7 @@ create policy "users_all_registrations" on registrations for all to authenticate
   is_team_member(hackathon_id)
 );
 
+-- 3. Team Members
 drop policy if exists "users_all_members" on team_members;
 create policy "users_all_members" on team_members for all to authenticated using (
   is_team_member(hackathon_id)
@@ -125,6 +137,7 @@ create policy "users_all_members" on team_members for all to authenticated using
   is_team_member(hackathon_id)
 );
 
+-- 4. Dates
 drop policy if exists "users_all_dates" on dates;
 create policy "users_all_dates" on dates for all to authenticated using (
   is_team_member(hackathon_id)
@@ -132,6 +145,7 @@ create policy "users_all_dates" on dates for all to authenticated using (
   is_team_member(hackathon_id)
 );
 
+-- 5. Tasks
 drop policy if exists "users_all_tasks" on tasks;
 create policy "users_all_tasks" on tasks for all to authenticated using (
   is_team_member(hackathon_id)

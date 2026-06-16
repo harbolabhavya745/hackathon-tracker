@@ -13,11 +13,24 @@ export function renderAuth(container: HTMLElement) {
         <button class="btn btn-primary" id="btn-signin" style="flex:1;">Sign In</button>
         <button class="btn" id="btn-signup" style="flex:1;">Sign Up</button>
       </div>
+      <div style="margin-top:24px;padding-top:16px;border-top:0.5px solid var(--border);text-align:center;">
+        <button class="btn btn-sm btn-ghost" id="btn-reset" style="color:var(--text-3)">Trouble signing in? Clear local state</button>
+      </div>
     </div>
   `;
 
   const emailInput = document.getElementById('auth-email') as HTMLInputElement;
   const passwordInput = document.getElementById('auth-password') as HTMLInputElement;
+
+  document.getElementById('btn-reset')?.addEventListener('click', () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    // Clear cookies (basic attempt)
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    window.location.reload();
+  });
 
   document.getElementById('btn-signin')?.addEventListener('click', async () => {
     try {
