@@ -35,22 +35,38 @@ let state: AppState = {
 const appContainer = document.getElementById('app')!;
 
 async function init() {
-  authApi.onAuthStateChange(async (_event, session) => {
+  // 1. Listen for auth changes (this handles login/logout and initial session)
+  authApi.onAuthStateChange(async (event, session) => {
+    // Only reload data if the user actually changed or it's the initial sign-in
+    const userChanged = state.user?.id !== session?.user?.id;
+    state.user = session?.user || null;
+
+    if (state.user && (userChanged || event === 'SIGNED_IN')) {
+      try {
+        await loadData();
+        setupSubscriptions();
+      } catch (e) {
+        console.error('Data load failed:', e);
+      }
+    }
+    render();
+  });
+
+  // 2. Try to get initial session without crashing the app
+  try {
+    const session = await authApi.getSession();
     state.user = session?.user || null;
     if (state.user) {
       await loadData();
       setupSubscriptions();
     }
+  } catch (e) {
+    console.error('Initial session fetch failed:', e);
+    state.user = null;
+  } finally {
+    // Always render something so the user doesn't get a grey screen
     render();
-  });
-
-  const session = await authApi.getSession();
-  state.user = session?.user || null;
-  if (state.user) {
-    await loadData();
-    setupSubscriptions();
   }
-  render();
 }
 
 function setupSubscriptions() {
@@ -385,6 +401,123 @@ function setupEventListeners() {
         closeModal();
         render();
         toast('Member added!');
+      } catch (e: any) {
+        toast('Failed: ' + e.message);
+      }
+    });
+  });
+
+  // Task add
+  document.getElementById('add-task-btn')?.addEventListener('click', () => {
+    showModal(`
+      <h3>Add Task</h3>
+      <div class="field"><label>Title</label><input id="t-title"></div>
+      <div class="field"><label>Assigned To</label><input id="t-assign"></div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="t-pri">
+          <option value="low">Low</option>
+          <option value="med" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="save-task">Add</button>
+      </div>
+    `);
+    document.getElementById('save-task')?.addEventListener('click', async () => {
+      const title = (document.getElementById('t-title') as HTMLInputElement).value;
+      const assigned_to = (document.getElementById('t-assign') as HTMLInputElement).value;
+      const priority = (document.getElementById('t-pri') as HTMLSelectElement).value as any;
+      try {
+        const t = await tasksApi.add({ hackathon_id: state.currentHackathonId!, title, assigned_to, priority });
+        state.cache.tasks[state.currentHackathonId!].push(t);
+        closeModal();
+        render();
+        toast('Task added!');
+      } catch (e: any) {
+        toast('Failed: ' + e.message);
+      }
+    });
+  });
+
+  // Date add
+  document.getElementById('add-date-btn')?.addEventListener('click', () => {
+    showModal(`
+      <h3>Add Important Date</h3>
+      <div class="field"><label>Label</label><input id="d-label"></div>
+      <div class="field"><label>Date</label><input type="date" id="d-date"></div>
+      <div class="field">
+        <label>Type</label>
+        <select id="d-type">
+          <option value="event">Event</option>
+          <option value="deadline">Deadline</option>
+          <option value="milestone">Milestone</option>
+          <option value="info">Info</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="save-date">Add</button>
+      </div>
+    `);
+    document.getElementById('save-date')?.addEventListener('click', async () => {
+      const label = (document.getElementById('d-label') as HTMLInputElement).value;
+      const date = (document.getElementById('d-date') as HTMLInputElement).value;
+      const type = (document.getElementById('d-type') as HTMLSelectElement).value as any;
+      try {
+        const d = await datesApi.add({ hackathon_id: state.currentHackathonId!, label, date, type });
+        state.cache.dates[state.currentHackathonId!].push(d);
+        closeModal();
+        render();
+        toast('Date added!');
+      } catch (e: any) {
+        toast('Failed: ' + e.message);
+      }
+    });
+  });
+
+  // Edit Registration
+  document.getElementById('edit-reg-btn')?.addEventListener('click', () => {
+    const r = state.cache.regs[state.currentHackathonId!] || {};
+    showModal(`
+      <h3>Edit Registration</h3>
+      <div class="field">
+        <label>Status</label>
+        <select id="r-status">
+          <option value="not_started" ${r.status === 'not_started' ? 'selected' : ''}>Not Started</option>
+          <option value="pending" ${r.status === 'pending' ? 'selected' : ''}>Pending</option>
+          <option value="registered" ${r.status === 'registered' ? 'selected' : ''}>Registered</option>
+          <option value="cancelled" ${r.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+        </select>
+      </div>
+      <div class="field"><label>Team Name</label><input id="r-team" value="${r.team_name || ''}"></div>
+      <div class="field"><label>Track</label><input id="r-track" value="${r.track || ''}"></div>
+      <div class="field"><label>Reference ID</label><input id="r-ref" value="${r.ref_id || ''}"></div>
+      <div class="field"><label>Link</label><input id="r-link" value="${r.link || ''}"></div>
+      <div class="field"><label>Notes</label><textarea id="r-notes">${r.notes || ''}</textarea></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="save-reg">Save</button>
+      </div>
+    `);
+    document.getElementById('save-reg')?.addEventListener('click', async () => {
+      const updates = {
+        hackathon_id: state.currentHackathonId!,
+        status: (document.getElementById('r-status') as HTMLSelectElement).value as any,
+        team_name: (document.getElementById('r-team') as HTMLInputElement).value,
+        track: (document.getElementById('r-track') as HTMLInputElement).value,
+        ref_id: (document.getElementById('r-ref') as HTMLInputElement).value,
+        link: (document.getElementById('r-link') as HTMLInputElement).value,
+        notes: (document.getElementById('r-notes') as HTMLTextAreaElement).value,
+      };
+      try {
+        const updated = await registrationApi.upsert(updates);
+        state.cache.regs[state.currentHackathonId!] = updated;
+        closeModal();
+        render();
+        toast('Registration updated!');
       } catch (e: any) {
         toast('Failed: ' + e.message);
       }
