@@ -98,7 +98,12 @@ function setupSubscriptions() {
       if (state.currentHackathonId) {
         await loadHackathonDetails(state.currentHackathonId);
       }
-      render();
+      
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      if (!isInputFocused) {
+        render();
+      }
     })
     .subscribe();
 }
@@ -169,7 +174,7 @@ function render() {
         <div class="topbar">
           <span class="topbar-title">${state.currentView.charAt(0).toUpperCase() + state.currentView.slice(1)}</span>
           <div class="topbar-actions">
-            ${state.currentView === 'overview' ? '<button class="btn btn-sm btn-danger" id="del-hack-btn"><i class="ti ti-trash"></i> Delete Hackathon</button>' : ''}
+            ${state.currentView === 'overview' && h?.user_id === state.user.id ? '<button class="btn btn-sm btn-danger" id="del-hack-btn"><i class="ti ti-trash"></i> Delete Hackathon</button>' : ''}
           </div>
         </div>
         <div class="content" id="view-content">
@@ -418,7 +423,7 @@ function setupEventListeners() {
     document.getElementById('save-member')?.addEventListener('click', async () => {
       const name = (document.getElementById('m-name') as HTMLInputElement).value;
       const role = (document.getElementById('m-role') as HTMLInputElement).value;
-      const email = (document.getElementById('m-email') as HTMLInputElement).value;
+      const email = (document.getElementById('m-email') as HTMLInputElement).value.toLowerCase().trim();
       try {
         const m = await teamApi.add({ hackathon_id: state.currentHackathonId!, name, role, email });
         state.cache.members[state.currentHackathonId!].push(m);

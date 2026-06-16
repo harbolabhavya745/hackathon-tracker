@@ -102,61 +102,63 @@ alter table dates         enable row level security;
 alter table tasks         enable row level security;
 
 -- ── Step 7: Simplified Helper function ─────────────────────
-create or replace function is_team_member(h_id uuid)
-returns boolean as $$
-declare
-  user_email text;
+create or replace function get_accessible_hackathons()
+returns setof uuid as $$
 begin
-  -- Get user email from JWT
-  user_email := lower(auth.jwt() ->> 'email');
-  
-  -- Check if owner
-  if exists (select 1 from hackathons where id = h_id and user_id = auth.uid()) then
-    return true;
-  end if;
-  
-  -- Check if teammate
-  return exists (
-    select 1 from team_members
-    where hackathon_id = h_id
-    and lower(email) = user_email
-  );
+  return query
+  select id from hackathons where user_id = auth.uid()
+  union
+  select hackathon_id from team_members where lower(email) = lower(auth.jwt() ->> 'email');
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
 
 -- ── Step 8: RLS Policies ───────────────────────────────────
 
--- 1. Hackathons
-create policy "users_all_hackathons" on hackathons for all to authenticated using (
-  is_team_member(id)
+-- 1. Hackathons (Split policies to prevent team members from deleting or updating)
+drop policy if exists "users_all_hackathons" on hackathons;
+
+create policy "hackathons_select" on hackathons for select to authenticated using (
+  id in (select get_accessible_hackathons())
+);
+
+create policy "hackathons_insert" on hackathons for insert to authenticated with check (
+  auth.uid() = user_id
+);
+
+create policy "hackathons_update" on hackathons for update to authenticated using (
+  auth.uid() = user_id
 ) with check (
-  auth.uid() = user_id -- Only owners can create/update hackathons themselves
+  auth.uid() = user_id
+);
+
+create policy "hackathons_delete" on hackathons for delete to authenticated using (
+  auth.uid() = user_id
 );
 
 -- 2. Registrations
 create policy "users_all_registrations" on registrations for all to authenticated using (
-  is_team_member(hackathon_id)
+  hackathon_id in (select get_accessible_hackathons())
 ) with check (
-  is_team_member(hackathon_id)
+  hackathon_id in (select get_accessible_hackathons())
 );
 
 -- 3. Team Members
 create policy "users_all_members" on team_members for all to authenticated using (
-  is_team_member(hackathon_id)
+  hackathon_id in (select get_accessible_hackathons())
 ) with check (
-  is_team_member(hackathon_id)
+  hackathon_id in (select get_accessible_hackathons())
 );
 
 -- 4. Dates
 create policy "users_all_dates" on dates for all to authenticated using (
-  is_team_member(hackathon_id)
+  hackathon_id in (select get_accessible_hackathons())
 ) with check (
-  is_team_member(hackathon_id)
+  hackathon_id in (select get_accessible_hackathons())
 );
 
 -- 5. Tasks
 create policy "users_all_tasks" on tasks for all to authenticated using (
-  is_team_member(hackathon_id)
+  hackathon_id in (select get_accessible_hackathons())
 ) with check (
-  is_team_member(hackathon_id)
+  hackathon_id in (select get_accessible_hackathons())
 );
