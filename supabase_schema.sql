@@ -118,7 +118,7 @@ $$ language plpgsql security definer set search_path = public;
 drop policy if exists "users_all_hackathons" on hackathons;
 
 create policy "hackathons_select" on hackathons for select to authenticated using (
-  id in (select get_accessible_hackathons())
+  user_id = auth.uid() OR id in (select get_accessible_hackathons())
 );
 
 create policy "hackathons_insert" on hackathons for insert to authenticated with check (
