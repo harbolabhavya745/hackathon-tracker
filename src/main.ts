@@ -138,6 +138,48 @@ async function loadHackathonDetails(id: string) {
   if (r) state.cache.regs[id] = r;
 }
 
+// Returns whole-day difference between the date and today (can be negative for past dates)
+function daysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
+}
+
+// A deadline is "urgent" when it's a deadline-type date landing today or within the next 3 days
+function isUrgentDeadline(d: DateItem): boolean {
+  if (d.type !== 'deadline') return false;
+  const diff = daysUntil(d.date);
+  return diff >= 0 && diff <= 3;
+}
+
+let dismissedBannerHackId: string | null = null;
+
+function renderDeadlineBanner(h?: Hackathon): string {
+  if (!h) return '';
+  if (dismissedBannerHackId === h.id) return '';
+  const dates = state.cache.dates[h.id] || [];
+  const urgent = dates.filter(isUrgentDeadline).sort((a, b) => daysUntil(a.date) - daysUntil(b.date));
+  if (!urgent.length) return '';
+
+  const items = urgent.map(d => {
+    const diff = daysUntil(d.date);
+    const when = diff === 0 ? 'today' : diff === 1 ? 'tomorrow' : `in ${diff} days`;
+    return `<div class="deadline-banner-item"><i class="ti ti-alert-triangle"></i> <strong>${d.label}</strong> is due ${when} (${d.date})</div>`;
+  }).join('');
+
+  return `
+    <div class="deadline-banner" id="deadline-banner">
+      <div class="deadline-banner-head">
+        <span class="deadline-banner-title"><i class="ti ti-alert-triangle"></i> ${urgent.length > 1 ? `${urgent.length} deadlines coming up` : 'Deadline coming up'}</span>
+        <button class="deadline-banner-close" id="deadline-banner-close">&times;</button>
+      </div>
+      ${items}
+    </div>
+  `;
+}
+
 function render() {
   if (!state.user) {
     renderAuth(appContainer);
@@ -171,6 +213,7 @@ function render() {
       </aside>
 
       <main class="main">
+        ${renderDeadlineBanner(h)}
         <div class="topbar">
           <span class="topbar-title">${state.currentView.charAt(0).toUpperCase() + state.currentView.slice(1)}</span>
           <div class="topbar-actions">
@@ -232,10 +275,10 @@ function renderOverview(h: Hackathon) {
     ${nextDate ? `
       <div class="panel">
         <div class="panel-head"><div class="panel-head-title">Upcoming</div></div>
-        <div class="row-item">
+        <div class="row-item ${isUrgentDeadline(nextDate) ? 'urgent' : ''}">
           <div class="row-main">
             <div class="row-title">${nextDate.label}</div>
-            <div class="row-sub">${nextDate.date} • ${nextDate.type}</div>
+            <div class="row-sub">${nextDate.date} • ${nextDate.type}${isUrgentDeadline(nextDate) ? ` • <span class="badge b-red">due soon</span>` : ''}</div>
           </div>
         </div>
       </div>
@@ -298,17 +341,21 @@ function renderDates(h: Hackathon) {
         <div class="panel-head-title">Important Dates</div>
         <button class="btn btn-sm" id="add-date-btn"><i class="ti ti-plus"></i> Add Date</button>
       </div>
-      ${dates.length ? dates.map(d => `
-        <div class="row-item">
+      ${dates.length ? dates.map(d => {
+        const urgent = isUrgentDeadline(d);
+        const diff = daysUntil(d.date);
+        return `
+        <div class="row-item ${urgent ? 'urgent' : ''}">
           <div class="row-main">
             <div class="row-title">${d.label}</div>
-            <div class="row-sub">${d.date} • <span class="badge b-gray" style="text-transform:capitalize">${d.type}</span></div>
+            <div class="row-sub">${d.date} • <span class="badge ${urgent ? 'b-red' : 'b-gray'}" style="text-transform:capitalize">${d.type}</span>${urgent ? ` <span class="badge b-red">${diff === 0 ? 'due today' : diff === 1 ? 'due tomorrow' : `due in ${diff}d`}</span>` : ''}</div>
           </div>
           <div class="row-actions">
             <button class="btn-ghost btn btn-sm del-date" data-id="${d.id}"><i class="ti ti-trash"></i></button>
           </div>
         </div>
-      `).join('') : '<div class="empty">No dates added yet.</div>'}
+      `;
+      }).join('') : '<div class="empty">No dates added yet.</div>'}
     </div>
   `;
 }
@@ -343,8 +390,14 @@ function setupEventListeners() {
 
   document.getElementById('hack-sel')?.addEventListener('change', async (e: any) => {
     state.currentHackathonId = e.target.value;
+    dismissedBannerHackId = null;
     await loadHackathonDetails(state.currentHackathonId!);
     render();
+  });
+
+  document.getElementById('deadline-banner-close')?.addEventListener('click', () => {
+    if (state.currentHackathonId) dismissedBannerHackId = state.currentHackathonId;
+    document.getElementById('deadline-banner')?.remove();
   });
 
   document.querySelectorAll('.nav-item').forEach(btn => {
