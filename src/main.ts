@@ -3,7 +3,7 @@ import { authApi } from './api/auth';
 import { supabase, isSupabaseConfigured } from './api/supabase';
 import { hackathonApi, teamApi, datesApi, tasksApi, registrationApi } from './api/hackathons';
 import { renderAuth } from './components/Auth';
-import { Hackathon, Registration, TeamMember, DateItem, Task } from './types';
+import { Hackathon, HackathonStatus, Registration, TeamMember, DateItem, Task } from './types';
 import { toast, showModal, closeModal } from './utils/ui';
 
 interface AppState {
@@ -11,6 +11,7 @@ interface AppState {
   hackathons: Hackathon[];
   currentHackathonId: string | null;
   currentView: string;
+  boardHidePast: boolean;
   cache: {
     members: Record<string, TeamMember[]>;
     dates: Record<string, DateItem[]>;
@@ -23,7 +24,8 @@ let state: AppState = {
   user: null,
   hackathons: [],
   currentHackathonId: null,
-  currentView: 'overview',
+  currentView: 'board',
+  boardHidePast: true,
   cache: {
     members: {},
     dates: {},
@@ -107,6 +109,7 @@ async function recoverFromBadSession() {
 }
 
 let activeChannel: any = null;
+let panicInterval: any = null;
 
 function setupSubscriptions() {
   if (!state.user || activeChannel) return;
@@ -176,6 +179,22 @@ function isUrgentDeadline(d: DateItem): boolean {
   return diff >= 0 && diff <= 3;
 }
 
+// The exact submission deadline for the panic timer: the soonest upcoming
+// deadline-type entry in the Dates tab, falling back to the hackathon's end date.
+function getSubmissionDeadline(h: Hackathon): { label: string; date: Date } | null {
+  const dates = state.cache.dates[h.id] || [];
+  const upcomingDeadlines = dates
+    .filter(d => d.type === 'deadline' && new Date(d.date).getTime() >= Date.now() - 86400000)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  if (upcomingDeadlines.length) {
+    return { label: upcomingDeadlines[0].label, date: new Date(upcomingDeadlines[0].date) };
+  }
+  if (h.end_date) {
+    return { label: 'Submission deadline', date: new Date(h.end_date) };
+  }
+  return null;
+}
+
 let notificationPermissionRequested = false;
 
 async function notifyUrgentDeadlines(h?: Hackathon) {
@@ -242,6 +261,46 @@ function renderDeadlineBanner(h?: Hackathon): string {
   `;
 }
 
+function renderPanicTimer(h?: Hackathon): string {
+  if (state.currentView === 'board') return '';
+  if (!h || h.status !== 'hacking') return '';
+  const deadline = getSubmissionDeadline(h);
+  if (!deadline) return '';
+  return `
+    <div class="panic-timer" id="panic-timer" data-deadline="${deadline.date.toISOString()}">
+      <div class="panic-timer-label"><i class="ti ti-alarm"></i> ${deadline.label}</div>
+      <div class="panic-timer-clock" id="panic-clock">--</div>
+    </div>
+  `;
+}
+
+function setupPanicTimer() {
+  if (panicInterval) { clearInterval(panicInterval); panicInterval = null; }
+  const el = document.getElementById('panic-timer');
+  const clock = document.getElementById('panic-clock');
+  if (!el || !clock) return;
+
+  const tick = () => {
+    const deadline = new Date(el.dataset.deadline!).getTime();
+    const diff = deadline - Date.now();
+    if (diff <= 0) {
+      clock.textContent = "Time's up!";
+      el.classList.add('over');
+      return;
+    }
+    el.classList.remove('over');
+    const totalSec = Math.floor(diff / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const hrs = Math.floor((totalSec % 86400) / 3600);
+    const min = Math.floor((totalSec % 3600) / 60);
+    const sec = totalSec % 60;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    clock.textContent = d > 0 ? `${d}d ${pad(hrs)}:${pad(min)}:${pad(sec)}` : `${pad(hrs)}:${pad(min)}:${pad(sec)}`;
+  };
+  tick();
+  panicInterval = setInterval(tick, 1000);
+}
+
 function render() {
   if (!state.user) {
     renderAuth(appContainer);
@@ -261,6 +320,8 @@ function render() {
           <div class="hack-tags">${h?.tags.join(', ') || ''}</div>
         </div>
         <nav class="sidebar-nav">
+          <button class="nav-item ${state.currentView === 'board' ? 'active' : ''}" data-view="board"><i class="ti ti-layout-kanban"></i> Board</button>
+          <div class="nav-divider"></div>
           <button class="nav-item ${state.currentView === 'overview' ? 'active' : ''}" data-view="overview"><i class="ti ti-layout-dashboard"></i> Overview</button>
           <button class="nav-item ${state.currentView === 'registration' ? 'active' : ''}" data-view="registration"><i class="ti ti-clipboard-check"></i> Registration</button>
           <button class="nav-item ${state.currentView === 'team' ? 'active' : ''}" data-view="team"><i class="ti ti-users"></i> Team <span class="nav-count">${state.cache.members[h?.id || '']?.length || 0}</span></button>
@@ -277,6 +338,7 @@ function render() {
 
       <main class="main">
         ${renderDeadlineBanner(h)}
+        ${renderPanicTimer(h)}
         <div class="topbar">
           <span class="topbar-title">${state.currentView.charAt(0).toUpperCase() + state.currentView.slice(1)}</span>
           <div class="topbar-actions">
@@ -291,9 +353,12 @@ function render() {
   `;
 
   setupEventListeners();
+  setupPanicTimer();
 }
 
 function renderView() {
+  if (state.currentView === 'board') return renderBoard();
+
   const h = state.hackathons.find(x => x.id === state.currentHackathonId);
   if (!h) return '<div class="empty">No hackathon selected. Create one to get started!</div>';
 
@@ -333,6 +398,13 @@ function renderOverview(h: Hackathon) {
       </div>
       <div class="about-body">${h.description || 'No description provided.'}</div>
       <div class="about-tags">${h.tags.map(t => `<span class="badge b-gray">${t}</span>`).join('')}</div>
+      <table class="kv-table">
+        <tr><td class="kv-key">Status</td><td>${STATUS_COLUMNS.find(c => c.key === h.status)?.label || h.status}</td></tr>
+        <tr><td class="kv-key">Dates</td><td>${h.start_date || '?'} → ${h.end_date || '?'}${h.timezone ? ` (${h.timezone})` : ''}</td></tr>
+        <tr><td class="kv-key">Team Size Limit</td><td>${h.team_size_limit || 'No limit set'}</td></tr>
+        <tr><td class="kv-key">Website</td><td>${h.website_link ? `<a href="${h.website_link}" target="_blank" style="color:var(--accent)">${h.website_link}</a>` : '-'}</td></tr>
+        <tr><td class="kv-key">Prize Tracks</td><td>${h.prize_tracks.length ? h.prize_tracks.map(t => `<span class="badge b-teal">${t}</span>`).join(' ') : '-'}</td></tr>
+      </table>
     </div>
 
     ${nextDate ? `
@@ -384,8 +456,13 @@ function renderTeam(h: Hackathon) {
         <div class="row-item">
           <div class="av av-${i % 6}">${m.name.split(' ').map(n => n[0]).join('').toUpperCase()}</div>
           <div class="row-main">
-            <div class="row-title">${m.name}</div>
-            <div class="row-sub">${m.role} • ${m.email}</div>
+            <div class="row-title">${m.name} ${m.role ? `<span class="badge b-blue">${m.role}</span>` : ''}</div>
+            <div class="row-sub">
+              ${m.email ? `<i class="ti ti-mail"></i> ${m.email}` : ''}
+              ${m.discord ? ` • <i class="ti ti-brand-discord"></i> ${m.discord}` : ''}
+              ${m.github ? ` • <a href="https://github.com/${m.github.replace(/^@/, '')}" target="_blank" style="color:var(--accent)"><i class="ti ti-brand-github"></i> ${m.github}</a>` : ''}
+              ${!m.email && !m.discord && !m.github ? 'No contact info' : ''}
+            </div>
           </div>
           <div class="row-actions">
             <button class="btn-ghost btn btn-sm del-member" data-id="${m.id}"><i class="ti ti-trash"></i></button>
@@ -423,13 +500,26 @@ function renderDates(h: Hackathon) {
   `;
 }
 
+const SUBMISSION_CHECKLIST_ITEMS = [
+  'Record 2-min demo video',
+  'Update README with setup instructions',
+  'Add screenshots/GIFs to README',
+  'Push final commit',
+  'Double check all team members are listed',
+  'Verify demo video link works',
+  'Submit on Devpost',
+];
+
 function renderTasks(h: Hackathon) {
   const tasks = state.cache.tasks[h.id] || [];
   return `
     <div class="panel">
       <div class="panel-head">
         <div class="panel-head-title">Task Checklist</div>
-        <button class="btn btn-sm" id="add-task-btn"><i class="ti ti-plus"></i> Add Task</button>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm" id="load-checklist-btn"><i class="ti ti-list-check"></i> Load Submission Checklist</button>
+          <button class="btn btn-sm" id="add-task-btn"><i class="ti ti-plus"></i> Add Task</button>
+        </div>
       </div>
       ${tasks.length ? tasks.map(t => `
         <div class="row-item">
@@ -445,6 +535,93 @@ function renderTasks(h: Hackathon) {
       `).join('') : '<div class="empty">No tasks yet.</div>'}
     </div>
   `;
+}
+
+const STATUS_COLUMNS: { key: HackathonStatus; label: string }[] = [
+  { key: 'bookmarked', label: 'Bookmarked' },
+  { key: 'applied', label: 'Applied' },
+  { key: 'accepted', label: 'Accepted' },
+  { key: 'hacking', label: 'Currently Hacking' },
+  { key: 'completed', label: 'Completed' },
+];
+
+// The date the board treats as "the deadline" for a hackathon: prefer end date,
+// fall back to start date if only that's known.
+function hackathonDeadline(h: Hackathon): string | null {
+  return h.end_date || h.start_date || null;
+}
+
+function isPast(h: Hackathon): boolean {
+  const d = hackathonDeadline(h);
+  return d !== null && daysUntil(d) < 0;
+}
+
+function renderBoardCard(h: Hackathon): string {
+  const deadline = hackathonDeadline(h);
+  const diff = deadline ? daysUntil(deadline) : null;
+  let deadlineBadge = '';
+  if (diff !== null) {
+    if (diff < 0) deadlineBadge = `<span class="badge b-gray">ended</span>`;
+    else if (diff <= 3) deadlineBadge = `<span class="badge b-red">${diff === 0 ? 'today' : diff === 1 ? '1 day left' : `${diff} days left`}</span>`;
+    else deadlineBadge = `<span class="badge b-gray">${diff} days left</span>`;
+  }
+  const dateRange = h.start_date || h.end_date
+    ? `${h.start_date || '?'} → ${h.end_date || '?'}`
+    : 'No dates set';
+
+  return `
+    <div class="board-card" data-id="${h.id}">
+      <div class="board-card-title">${h.name}</div>
+      <div class="board-card-sub">${dateRange}${h.timezone ? ` • ${h.timezone}` : ''}</div>
+      <div class="board-card-meta">
+        ${deadlineBadge}
+        ${h.team_size_limit ? `<span class="badge b-blue">max ${h.team_size_limit}</span>` : ''}
+        ${h.website_link ? `<a href="${h.website_link}" target="_blank" class="board-card-link" onclick="event.stopPropagation()"><i class="ti ti-external-link"></i></a>` : ''}
+      </div>
+      ${h.prize_tracks.length ? `<div class="board-card-tracks">${h.prize_tracks.map(t => `<span class="badge b-teal">${t}</span>`).join('')}</div>` : ''}
+      <select class="board-card-status" data-id="${h.id}" onclick="event.stopPropagation()">
+        ${STATUS_COLUMNS.map(c => `<option value="${c.key}" ${c.key === h.status ? 'selected' : ''}>Move to: ${c.label}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function renderBoard(): string {
+  const controls = `
+    <div class="board-controls">
+      <label class="board-filter"><input type="checkbox" id="board-hide-past" ${state.boardHidePast ? 'checked' : ''}> Hide past events</label>
+      <span class="board-sort-note"><i class="ti ti-sort-ascending"></i> Sorted by closest deadline</span>
+    </div>
+  `;
+
+  const columns = STATUS_COLUMNS.map(col => {
+    let items = state.hackathons.filter(h => h.status === col.key);
+    if (state.boardHidePast && col.key !== 'completed') {
+      items = items.filter(h => !isPast(h));
+    }
+    items = [...items].sort((a, b) => {
+      const da = hackathonDeadline(a);
+      const db = hackathonDeadline(b);
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return daysUntil(da) - daysUntil(db);
+    });
+
+    return `
+      <div class="board-col">
+        <div class="board-col-head">
+          <span>${col.label}</span>
+          <span class="nav-count">${items.length}</span>
+        </div>
+        <div class="board-col-body">
+          ${items.length ? items.map(renderBoardCard).join('') : '<div class="board-empty">Nothing here</div>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `${controls}<div class="board">${columns}</div>`;
 }
 
 function setupEventListeners() {
@@ -470,6 +647,37 @@ function setupEventListeners() {
     });
   });
 
+  document.getElementById('board-hide-past')?.addEventListener('change', (e: any) => {
+    state.boardHidePast = e.target.checked;
+    render();
+  });
+
+  document.querySelectorAll('.board-card').forEach(card => {
+    card.addEventListener('click', async (e: any) => {
+      const id = (e.currentTarget as HTMLElement).dataset.id!;
+      state.currentHackathonId = id;
+      state.currentView = 'overview';
+      await loadHackathonDetails(id);
+      render();
+    });
+  });
+
+  document.querySelectorAll('.board-card-status').forEach(sel => {
+    sel.addEventListener('change', async (e: any) => {
+      const id = (e.currentTarget as HTMLElement).dataset.id!;
+      const status = e.target.value as HackathonStatus;
+      try {
+        const updated = await hackathonApi.update(id, { status });
+        const idx = state.hackathons.findIndex(x => x.id === id);
+        if (idx !== -1) state.hackathons[idx] = updated;
+        render();
+        toast('Status updated!');
+      } catch (err: any) {
+        toast('Failed: ' + err.message);
+      }
+    });
+  });
+
   document.getElementById('logout-btn')?.addEventListener('click', async () => {
     await authApi.signOut();
     state.user = null;
@@ -486,6 +694,18 @@ function setupEventListeners() {
       <div class="field"><label>Name</label><input id="new-h-name"></div>
       <div class="field"><label>Description</label><textarea id="new-h-desc"></textarea></div>
       <div class="field"><label>Tags (comma separated)</label><input id="new-h-tags"></div>
+      <div class="field">
+        <label>Status</label>
+        <select id="new-h-status">
+          ${STATUS_COLUMNS.map(c => `<option value="${c.key}">${c.label}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Start Date</label><input type="date" id="new-h-start"></div>
+      <div class="field"><label>End Date</label><input type="date" id="new-h-end"></div>
+      <div class="field"><label>Timezone</label><input id="new-h-tz" placeholder="e.g. IST, UTC-5"></div>
+      <div class="field"><label>Team Size Limit</label><input type="number" min="1" id="new-h-team-limit"></div>
+      <div class="field"><label>Devpost / Website Link</label><input id="new-h-link" placeholder="https://..."></div>
+      <div class="field"><label>Prize Tracks (comma separated)</label><input id="new-h-tracks"></div>
       <div class="modal-footer">
         <button class="btn" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="save-new-h">Create</button>
@@ -494,9 +714,17 @@ function setupEventListeners() {
     document.getElementById('save-new-h')?.addEventListener('click', async () => {
       const name = (document.getElementById('new-h-name') as HTMLInputElement).value;
       const description = (document.getElementById('new-h-desc') as HTMLTextAreaElement).value;
-      const tags = (document.getElementById('new-h-tags') as HTMLInputElement).value.split(',').map(t => t.trim());
+      const tags = (document.getElementById('new-h-tags') as HTMLInputElement).value.split(',').map(t => t.trim()).filter(t => t);
+      const status = (document.getElementById('new-h-status') as HTMLSelectElement).value as HackathonStatus;
+      const start_date = (document.getElementById('new-h-start') as HTMLInputElement).value || null;
+      const end_date = (document.getElementById('new-h-end') as HTMLInputElement).value || null;
+      const timezone = (document.getElementById('new-h-tz') as HTMLInputElement).value;
+      const teamLimitRaw = (document.getElementById('new-h-team-limit') as HTMLInputElement).value;
+      const team_size_limit = teamLimitRaw ? parseInt(teamLimitRaw, 10) : null;
+      const website_link = (document.getElementById('new-h-link') as HTMLInputElement).value;
+      const prize_tracks = (document.getElementById('new-h-tracks') as HTMLInputElement).value.split(',').map(t => t.trim()).filter(t => t);
       try {
-        const newH = await hackathonApi.create({ name, description, tags });
+        const newH = await hackathonApi.create({ name, description, tags, status, start_date, end_date, timezone, team_size_limit, website_link, prize_tracks });
         await registrationApi.upsert({ hackathon_id: newH.id, status: 'not_started' });
         state.hackathons.push(newH);
         state.currentHackathonId = newH.id;
@@ -532,8 +760,18 @@ function setupEventListeners() {
     showModal(`
       <h3>Add Team Member</h3>
       <div class="field"><label>Name</label><input id="m-name"></div>
-      <div class="field"><label>Role</label><input id="m-role"></div>
+      <div class="field">
+        <label>Role</label>
+        <select id="m-role">
+          <option value="Frontend">Frontend</option>
+          <option value="Backend">Backend</option>
+          <option value="Design">Design</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
       <div class="field"><label>Email</label><input id="m-email"></div>
+      <div class="field"><label>Discord Handle</label><input id="m-discord" placeholder="username"></div>
+      <div class="field"><label>GitHub</label><input id="m-github" placeholder="username"></div>
       <div class="modal-footer">
         <button class="btn" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="save-member">Add</button>
@@ -541,10 +779,12 @@ function setupEventListeners() {
     `);
     document.getElementById('save-member')?.addEventListener('click', async () => {
       const name = (document.getElementById('m-name') as HTMLInputElement).value;
-      const role = (document.getElementById('m-role') as HTMLInputElement).value;
+      const role = (document.getElementById('m-role') as HTMLSelectElement).value;
       const email = (document.getElementById('m-email') as HTMLInputElement).value.toLowerCase().trim();
+      const discord = (document.getElementById('m-discord') as HTMLInputElement).value.trim();
+      const github = (document.getElementById('m-github') as HTMLInputElement).value.trim();
       try {
-        const m = await teamApi.add({ hackathon_id: state.currentHackathonId!, name, role, email });
+        const m = await teamApi.add({ hackathon_id: state.currentHackathonId!, name, role, email, discord, github });
         state.cache.members[state.currentHackathonId!].push(m);
         closeModal();
         render();
@@ -556,6 +796,21 @@ function setupEventListeners() {
   });
 
   // Task add
+  document.getElementById('load-checklist-btn')?.addEventListener('click', async () => {
+    const hId = state.currentHackathonId!;
+    const existing = new Set((state.cache.tasks[hId] || []).map(t => t.title));
+    const toAdd = SUBMISSION_CHECKLIST_ITEMS.filter(title => !existing.has(title));
+    if (!toAdd.length) { toast('Checklist already loaded'); return; }
+    try {
+      const created = await Promise.all(toAdd.map(title => tasksApi.add({ hackathon_id: hId, title, priority: 'high' })));
+      state.cache.tasks[hId].push(...created);
+      render();
+      toast(`Added ${created.length} checklist items`);
+    } catch (e: any) {
+      toast('Failed: ' + e.message);
+    }
+  });
+
   document.getElementById('add-task-btn')?.addEventListener('click', () => {
     showModal(`
       <h3>Add Task</h3>
@@ -684,6 +939,18 @@ function setupEventListeners() {
       <div class="field"><label>Name</label><input id="e-h-name" value="${h.name}"></div>
       <div class="field"><label>Description</label><textarea id="e-h-desc">${h.description}</textarea></div>
       <div class="field"><label>Tags (comma separated)</label><input id="e-h-tags" value="${h.tags.join(', ')}"></div>
+      <div class="field">
+        <label>Status</label>
+        <select id="e-h-status">
+          ${STATUS_COLUMNS.map(c => `<option value="${c.key}" ${c.key === h.status ? 'selected' : ''}>${c.label}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Start Date</label><input type="date" id="e-h-start" value="${h.start_date || ''}"></div>
+      <div class="field"><label>End Date</label><input type="date" id="e-h-end" value="${h.end_date || ''}"></div>
+      <div class="field"><label>Timezone</label><input id="e-h-tz" value="${h.timezone || ''}" placeholder="e.g. IST, UTC-5"></div>
+      <div class="field"><label>Team Size Limit</label><input type="number" min="1" id="e-h-team-limit" value="${h.team_size_limit ?? ''}"></div>
+      <div class="field"><label>Devpost / Website Link</label><input id="e-h-link" value="${h.website_link || ''}" placeholder="https://..."></div>
+      <div class="field"><label>Prize Tracks (comma separated)</label><input id="e-h-tracks" value="${h.prize_tracks.join(', ')}"></div>
       <div class="modal-footer">
         <button class="btn" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="save-hack-btn">Save</button>
@@ -694,8 +961,16 @@ function setupEventListeners() {
       const name = (document.getElementById('e-h-name') as HTMLInputElement).value;
       const description = (document.getElementById('e-h-desc') as HTMLTextAreaElement).value;
       const tags = (document.getElementById('e-h-tags') as HTMLInputElement).value.split(',').map(t => t.trim()).filter(t => t);
+      const status = (document.getElementById('e-h-status') as HTMLSelectElement).value as HackathonStatus;
+      const start_date = (document.getElementById('e-h-start') as HTMLInputElement).value || null;
+      const end_date = (document.getElementById('e-h-end') as HTMLInputElement).value || null;
+      const timezone = (document.getElementById('e-h-tz') as HTMLInputElement).value;
+      const teamLimitRaw = (document.getElementById('e-h-team-limit') as HTMLInputElement).value;
+      const team_size_limit = teamLimitRaw ? parseInt(teamLimitRaw, 10) : null;
+      const website_link = (document.getElementById('e-h-link') as HTMLInputElement).value;
+      const prize_tracks = (document.getElementById('e-h-tracks') as HTMLInputElement).value.split(',').map(t => t.trim()).filter(t => t);
       try {
-        const updated = await hackathonApi.update(h.id, { name, description, tags });
+        const updated = await hackathonApi.update(h.id, { name, description, tags, status, start_date, end_date, timezone, team_size_limit, website_link, prize_tracks });
         const idx = state.hackathons.findIndex(x => x.id === h.id);
         if (idx !== -1) state.hackathons[idx] = updated;
         closeModal();
