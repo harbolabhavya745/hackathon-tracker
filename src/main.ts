@@ -301,6 +301,50 @@ function setupPanicTimer() {
   panicInterval = setInterval(tick, 1000);
 }
 
+function buildPrintSummary(): string {
+  const today = new Date().toLocaleDateString();
+  const groups = STATUS_COLUMNS.map(col => {
+    const items = state.hackathons.filter(h => h.status === col.key);
+    if (!items.length) return '';
+    return `
+      <h2>${col.label} (${items.length})</h2>
+      <table class="print-table">
+        <thead>
+          <tr><th>Name</th><th>Dates</th><th>Team Limit</th><th>Tracks</th><th>Link</th></tr>
+        </thead>
+        <tbody>
+          ${items.map(h => `
+            <tr>
+              <td><strong>${h.name}</strong>${h.description ? `<div class="print-desc">${h.description}</div>` : ''}</td>
+              <td>${h.start_date || '?'} → ${h.end_date || '?'}${h.timezone ? ` (${h.timezone})` : ''}</td>
+              <td>${h.team_size_limit || '-'}</td>
+              <td>${h.prize_tracks.join(', ') || '-'}</td>
+              <td>${h.website_link || '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }).join('');
+
+  return `
+    <h1>Hackathon Summary</h1>
+    <div class="print-meta">Generated ${today} • ${state.hackathons.length} hackathon${state.hackathons.length === 1 ? '' : 's'}</div>
+    ${groups || '<p>No hackathons yet.</p>'}
+  `;
+}
+
+function exportSummaryPdf() {
+  let el = document.getElementById('print-summary');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'print-summary';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = buildPrintSummary();
+  window.print();
+}
+
 function render() {
   if (!state.user) {
     renderAuth(appContainer);
@@ -329,6 +373,7 @@ function render() {
           <button class="nav-item ${state.currentView === 'tasks' ? 'active' : ''}" data-view="tasks"><i class="ti ti-checklist"></i> Tasks <span class="nav-count">${state.cache.tasks[h?.id || '']?.length || 0}</span></button>
         </nav>
         <div class="sidebar-footer">
+          <button class="btn btn-full" id="export-pdf-btn"><i class="ti ti-file-type-pdf"></i> Export Summary (PDF)</button>
           <button class="btn btn-full" id="import-btn"><i class="ti ti-file-import"></i> Bulk Import</button>
           <button class="btn btn-full" id="new-hack-btn"><i class="ti ti-plus"></i> New hackathon</button>
           <button class="btn btn-full btn-danger" id="logout-btn"><i class="ti ti-logout"></i> Logout</button>
@@ -646,6 +691,8 @@ function setupEventListeners() {
       render();
     });
   });
+
+  document.getElementById('export-pdf-btn')?.addEventListener('click', exportSummaryPdf);
 
   document.getElementById('board-hide-past')?.addEventListener('change', (e: any) => {
     state.boardHidePast = e.target.checked;
