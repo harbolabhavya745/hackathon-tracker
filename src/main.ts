@@ -141,7 +141,15 @@ async function loadData() {
     if (hs.length > 0 && !state.currentHackathonId) {
       state.currentHackathonId = hs[0].id;
     }
-    
+
+    // Prefetch dates for every hackathon (not just the open one) so the Board
+    // can show each card's real nearest deadline instead of just start/end date.
+    await Promise.all(hs.map(async h => {
+      if (!state.cache.dates[h.id]) {
+        state.cache.dates[h.id] = await datesApi.getByHackathon(h.id);
+      }
+    }));
+
     if (state.currentHackathonId) {
       await loadHackathonDetails(state.currentHackathonId);
     }
@@ -616,19 +624,26 @@ const STATUS_COLUMNS: { key: HackathonStatus; label: string }[] = [
   { key: 'completed', label: 'Completed' },
 ];
 
-// The date the board treats as "the deadline" for a hackathon: prefer end date,
-// fall back to start date if only that's known.
-function hackathonDeadline(h: Hackathon): string | null {
-  return h.end_date || h.start_date || null;
+// The nearest deadline-type entry from that hackathon's Dates tab, if any is cached.
+function getCachedDeadline(h: Hackathon): DateItem | null {
+  const dates = state.cache.dates[h.id] || [];
+  const deadlines = dates.filter(d => d.type === 'deadline').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  return deadlines[0] || null;
+}
+
+// The date used for sorting/urgency: a real Dates-tab deadline first, else end/start date.
+function getSortDeadline(h: Hackathon): string | null {
+  return getCachedDeadline(h)?.date || h.end_date || h.start_date || null;
 }
 
 function isPast(h: Hackathon): boolean {
-  const d = hackathonDeadline(h);
+  const d = getSortDeadline(h);
   return d !== null && daysUntil(d) < 0;
 }
 
 function renderBoardCard(h: Hackathon): string {
-  const deadline = hackathonDeadline(h);
+  const cached = getCachedDeadline(h);
+  const deadline = getSortDeadline(h);
   const diff = deadline ? daysUntil(deadline) : null;
   let deadlineBadge = '';
   if (diff !== null) {
@@ -636,14 +651,16 @@ function renderBoardCard(h: Hackathon): string {
     else if (diff <= 3) deadlineBadge = `<span class="badge b-red">${diff === 0 ? 'today' : diff === 1 ? '1 day left' : `${diff} days left`}</span>`;
     else deadlineBadge = `<span class="badge b-gray">${diff} days left</span>`;
   }
-  const dateRange = h.start_date || h.end_date
-    ? `${h.start_date || '?'} → ${h.end_date || '?'}`
-    : 'No dates set';
+  const dateLine = cached
+    ? `${cached.label}: ${cached.date}`
+    : h.start_date || h.end_date
+      ? `${h.start_date || '?'} → ${h.end_date || '?'}`
+      : 'No dates set';
 
   return `
     <div class="board-card" data-id="${h.id}">
       <div class="board-card-title">${h.name}</div>
-      <div class="board-card-sub">${dateRange}${h.timezone ? ` • ${h.timezone}` : ''}</div>
+      <div class="board-card-sub">${dateLine}${h.timezone ? ` • ${h.timezone}` : ''}</div>
       <div class="board-card-meta">
         ${deadlineBadge}
         ${h.team_size_limit ? `<span class="badge b-blue">max ${h.team_size_limit}</span>` : ''}
@@ -671,8 +688,8 @@ function renderBoard(): string {
       items = items.filter(h => !isPast(h));
     }
     items = [...items].sort((a, b) => {
-      const da = hackathonDeadline(a);
-      const db = hackathonDeadline(b);
+      const da = getSortDeadline(a);
+      const db = getSortDeadline(b);
       if (!da && !db) return 0;
       if (!da) return 1;
       if (!db) return -1;
