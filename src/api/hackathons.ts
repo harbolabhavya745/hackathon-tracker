@@ -8,7 +8,11 @@ export const hackathonApi = {
       .select('*')
       .order('created_at', { ascending: true });
     if (error) throw error;
-    return data as Hackathon[];
+    return (data || []).map(h => ({
+      ...h,
+      tags: Array.isArray(h.tags) ? h.tags : [],
+      prize_tracks: Array.isArray(h.prize_tracks) ? h.prize_tracks : []
+    })) as Hackathon[];
   },
 
   async create(hackathon: Partial<Hackathon>) {
@@ -18,7 +22,11 @@ export const hackathonApi = {
       .select()
       .single();
     if (error) throw error;
-    return data as Hackathon;
+    return {
+      ...data,
+      tags: Array.isArray(data.tags) ? data.tags : [],
+      prize_tracks: Array.isArray(data.prize_tracks) ? data.prize_tracks : []
+    } as Hackathon;
   },
 
   async update(id: string, updates: Partial<Hackathon>) {
@@ -29,7 +37,11 @@ export const hackathonApi = {
       .select()
       .single();
     if (error) throw error;
-    return data as Hackathon;
+    return {
+      ...data,
+      tags: Array.isArray(data.tags) ? data.tags : [],
+      prize_tracks: Array.isArray(data.prize_tracks) ? data.prize_tracks : []
+    } as Hackathon;
   },
 
   async delete(id: string) {

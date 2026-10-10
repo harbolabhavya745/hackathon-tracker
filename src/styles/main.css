@@ -31,6 +31,12 @@ body{
   min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;
 }
 
+#app {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 /* Config screen */
 #config-screen{
   width:100%;max-width:480px;background:var(--bg);border:0.5px solid var(--border);
@@ -207,15 +213,6 @@ body{
   .deadline-banner{box-shadow:none;}
 }
 
-/* Avatar */
-.av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;}
-.av-0{background:#E6F1FB;color:#0C447C;}
-.av-1{background:#E1F5EE;color:#085041;}
-.av-2{background:#FAECE7;color:#712B13;}
-.av-3{background:#FBEAF0;color:#72243E;}
-.av-4{background:#FAEEDA;color:#633806;}
-.av-5{background:#EEEDFE;color:#3C3489;}
-
 /* Badges */
 .badge{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:var(--r-sm);font-weight:500;white-space:nowrap;}
 .b-green{background:var(--success-bg);color:var(--success-text);}
@@ -270,19 +267,6 @@ body{
 .import-tab.active{color:var(--text);border-bottom-color:var(--text);font-weight:500;}
 .import-pane{display:none;}
 .import-pane.active{display:block;}
-
-/* Bulk form steps */
-.step-header{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
-.step-num{width:22px;height:22px;border-radius:50%;background:var(--text);color:var(--bg);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.step-lbl{font-size:13px;font-weight:500;}
-.hack-card-mini{border:0.5px solid var(--border);border-radius:var(--r-md);padding:10px 14px;margin-bottom:8px;background:var(--bg-2);}
-.hack-card-mini .hc-name{font-size:13px;font-weight:500;}
-.hack-card-mini .hc-sub{font-size:11px;color:var(--text-2);}
-.repeat-btn{font-size:12px;color:var(--accent);cursor:pointer;border:none;background:none;padding:0;font-family:inherit;}
-
-/* About body */
-.about-body{padding:14px 16px;font-size:13px;color:var(--text-2);line-height:1.7;}
-.about-tags{padding:0 16px 14px;display:flex;gap:6px;flex-wrap:wrap;}
 
 /* Loading spinner */
 .spinner{width:16px;height:16px;border:2px solid var(--border-md);border-top-color:var(--text);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;}
