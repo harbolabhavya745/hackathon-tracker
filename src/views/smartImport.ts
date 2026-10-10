@@ -1,7 +1,6 @@
 import { HACKATHON_TEMPLATES } from '../utils/templates';
 
 export function renderSmartImportModal(): string {
-  const bookmarkletCode = `javascript:(function(){const text=(document.body.innerText||'').slice(0,10000);if(navigator.clipboard){navigator.clipboard.writeText(text).then(function(){alert('✅ Hackathon details copied to clipboard!\\n\\nNow switch to your Hackathon Tracker tab and click \\'Paste from Clipboard\\' (or press Ctrl+V).');}).catch(function(){alert('Please select and copy the text on this page.');});}else{alert('Please select and copy the text on this page.');}})();`;
   const savedKey = localStorage.getItem('gemini_api_key') || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
   if (savedKey && !localStorage.getItem('gemini_api_key')) {
     localStorage.setItem('gemini_api_key', savedKey);
@@ -11,27 +10,26 @@ export function renderSmartImportModal(): string {
     <div style="min-width:320px;max-width:680px;width:100%;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <h3 style="margin:0;font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px;">
-          <i class="ti ti-sparkles" style="color:var(--accent)"></i> Automate & Import Hackathon
+          <i class="ti ti-sparkles" style="color:var(--accent)"></i> Auto-Track / Import Hackathon
         </h3>
         <button class="btn-ghost btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
       </div>
 
       <div class="import-tabs">
-        <button class="import-tab active" data-tab="tab-smart"><i class="ti ti-wand"></i> Smart Extractor</button>
-        <button class="import-tab" data-tab="tab-templates"><i class="ti ti-template"></i> Templates</button>
-        <button class="import-tab" data-tab="tab-clipper"><i class="ti ti-browser"></i> Web Clipper</button>
-        <button class="import-tab" data-tab="tab-raw"><i class="ti ti-code"></i> JSON / CSV</button>
+        <button class="import-tab active" data-tab="tab-smart"><i class="ti ti-wand"></i> AI & Text Extractor</button>
+        <button class="import-tab" data-tab="tab-templates"><i class="ti ti-template"></i> Pre-built Templates</button>
+        <button class="import-tab" data-tab="tab-raw"><i class="ti ti-code"></i> Bulk JSON</button>
       </div>
 
       <!-- Tab 1: Smart Extractor (URL / Text) -->
       <div class="import-pane active" id="tab-smart">
         <div style="background:var(--teal-bg);color:var(--teal-text);padding:10px 12px;border-radius:var(--r-sm);font-size:12px;margin-bottom:12px;line-height:1.4;">
-          <strong><i class="ti ti-bulb"></i> Pro-Tip for Unstop / Devpost:</strong> Simply copy the description text or details section from the hackathon page (or click <em>Paste from Clipboard</em> below) for 100% accurate extraction of all dates, rounds, and prize tracks!
+          <strong><i class="ti ti-sparkles"></i> Instant AI Extraction:</strong> Copy the announcement text or details section from Unstop, Devpost, Discord, or Email, then click <em>Paste from Clipboard</em> below.
         </div>
 
         <div class="field">
           <label style="font-weight:500;">Hackathon Description Text or Direct URL</label>
-          <textarea id="smart-input" style="width:100%;min-height:100px;font-size:13px;" placeholder="Paste text here (e.g. from Unstop/Devpost page description with dates & tracks)..."></textarea>
+          <textarea id="smart-input" style="width:100%;min-height:110px;font-size:13px;" placeholder="Paste hackathon details text or announcement here..."></textarea>
         </div>
 
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
@@ -114,34 +112,10 @@ export function renderSmartImportModal(): string {
         </div>
       </div>
 
-      <!-- Tab 3: Web Clipper / Bookmarklet -->
-      <div class="import-pane" id="tab-clipper">
-        <div style="background:var(--info-bg);color:var(--info-text);padding:12px;border-radius:var(--r-md);font-size:12.5px;margin-bottom:14px;line-height:1.5;">
-          <strong><i class="ti ti-bookmark"></i> 1-Click Browser Bookmarklet</strong><br>
-          Drag the button below to your browser's Bookmark Bar. Whenever you are on Devpost, Devfolio, or any hackathon site, click the bookmark to instantly send it to this tracker!
-        </div>
-
-        <div style="text-align:center;padding:16px;background:var(--bg-2);border:0.5px dashed var(--border-md);border-radius:var(--r-md);margin-bottom:14px;">
-          <a href="${bookmarkletCode}" class="btn btn-primary" style="font-size:13px;padding:8px 16px;cursor:grab;" onclick="event.preventDefault(); alert('Drag this button to your Bookmarks Bar!');">
-            <i class="ti ti-plus"></i> + Add to Hackathon Tracker
-          </a>
-          <div style="font-size:11px;color:var(--text-3);margin-top:8px;">(Drag & drop to your Chrome / Edge / Firefox bookmarks bar)</div>
-        </div>
-
-        <div style="font-size:12px;color:var(--text-2);">
-          <strong>How it works:</strong>
-          <ol style="margin-left:18px;margin-top:4px;line-height:1.6;">
-            <li>Browse any hackathon page on the web.</li>
-            <li>Click <strong>+ Add to Hackathon Tracker</strong> in your bookmarks.</li>
-            <li>The tracker opens with the title, dates, and requirements auto-populated!</li>
-          </ol>
-        </div>
-      </div>
-
-      <!-- Tab 4: Bulk JSON / CSV -->
+      <!-- Tab 3: Bulk JSON -->
       <div class="import-pane" id="tab-raw">
         <p style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Paste a JSON array of hackathons.</p>
-        <textarea id="import-json" style="width:100%;height:140px;font-family:monospace;font-size:11.5px;" placeholder='[{"name":"HackX","description":"...","tags":["AI"],"dates":[{"label":"Kickoff","date":"2025-10-01"}]}]'></textarea>
+        <textarea id="import-json" style="width:100%;height:140px;font-family:monospace;font-size:11.5px;" placeholder='[{"name":"HackX","description":"...","tags":["AI"],"dates":[{"label":"Kickoff","date":"2026-10-01"}]}]'></textarea>
         <div class="modal-footer" style="margin-top:10px;">
           <button class="btn" onclick="closeModal()">Cancel</button>
           <button class="btn btn-primary" id="run-import">Import JSON</button>
@@ -150,3 +124,4 @@ export function renderSmartImportModal(): string {
     </div>
   `;
 }
+
