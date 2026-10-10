@@ -28,16 +28,45 @@ function toIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-// Attempt to parse string dates into YYYY-MM-DD
-function parseDateString(str: string): string | null {
+// Robust date parser supporting international formats, Indian DD/MM/YYYY, named months, and times
+export function parseDateString(str: any): string | null {
   if (!str) return null;
-  const isoMatch = str.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+  const s = String(str).trim();
+  if (!s || s === 'null' || s === 'undefined') return null;
+
+  // 1. ISO format: YYYY-MM-DD or YYYY/MM/DD
+  const isoMatch = s.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
   if (isoMatch) {
     const [, y, m, d] = isoMatch;
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
 
-  const d = new Date(str);
+  // 2. Day-Month-Year: DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = s.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  // 3. Named month with Day and optional Year (e.g. '15 Oct 2026', '15th October, 2026', 'Oct 15, 2026', '15 Oct 26')
+  const months: Record<string, number> = {
+    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+    jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12
+  };
+  const namedMatch = s.match(/(?:(\d{1,2})(?:st|nd|rd|th)?\s+([a-zA-Z]{3,9})(?:,?\s+(\d{2,4}))?)|(?:([a-zA-Z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{2,4}))?)/i);
+  if (namedMatch) {
+    const day = namedMatch[1] || namedMatch[5];
+    const monStr = (namedMatch[2] || namedMatch[4]).toLowerCase().slice(0, 3);
+    let year = namedMatch[3] || namedMatch[6] || new Date().getFullYear();
+    if (String(year).length === 2) year = '20' + year;
+    const monNum = months[monStr];
+    if (day && monNum) {
+      return `${year}-${String(monNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+
+  // 4. Native JS Date fallback
+  const d = new Date(s);
   if (!isNaN(d.getTime())) {
     return toIsoDate(d);
   }
@@ -57,7 +86,9 @@ async function fetchWithProxies(url: string): Promise<string> {
       const resp = await fetch(proxy, { headers: { 'Accept': 'text/html,application/json' } });
       if (resp.ok) {
         const text = await resp.text();
-        if (text && text.length > 50) return text;
+        if (text && text.length > 50 && !text.includes('Cloudflare') && !text.includes('Just a moment...')) {
+          return text;
+        }
       }
     } catch {
       // try next proxy
@@ -82,32 +113,76 @@ export async function extractWithGemini(content: string, apiKey?: string): Promi
   "timezone": "IST / UTC / EST etc",
   "team_size_limit": number or null,
   "prize_tracks": ["Track 1", "Track 2"],
-  "dates": [{"label": "Round 1 Deadline", "date": "YYYY-MM-DD", "type": "deadline"}],
+  "dates": [{"label": "Round 1 / Submission Deadline", "date": "YYYY-MM-DD", "type": "deadline"}],
   "tasks": [{"title": "Submit video demo", "priority": "high"}]
 }
 
+Important formatting rules:
+- Dates MUST be formatted strictly as YYYY-MM-DD (e.g. 2026-10-15).
+- Extract all rounds, milestones, registration deadlines, and tracks mentioned in the text.
+- If no year is specified in the text, assume year 2026.
+
 Content to analyze:
-${content.slice(0, 10000)}`;
+${content.slice(0, 12000)}`;
 
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      })
-    });
+  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+  for (const model of models) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json' }
+        })
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawJson) {
-        return JSON.parse(rawJson);
+      if (res.ok) {
+        const data = await res.json();
+        const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (rawJson) {
+          const parsed = JSON.parse(rawJson);
+          
+          // Sanitize dates into strict YYYY-MM-DD
+          const sDate = parseDateString(parsed.start_date);
+          const eDate = parseDateString(parsed.end_date);
+          const sanitizedDates = Array.isArray(parsed.dates) 
+            ? parsed.dates.map((d: any) => ({
+                label: d.label || 'Milestone',
+                date: parseDateString(d.date) || d.date,
+                type: (d.type || 'deadline') as 'event' | 'deadline' | 'milestone' | 'info'
+              })).filter((d: any) => parseDateString(d.date) !== null)
+            : [];
+
+          if (sDate && !sanitizedDates.some((d: any) => d.date === sDate)) {
+            sanitizedDates.push({ label: 'Hackathon Starts', date: sDate, type: 'event' });
+          }
+          if (eDate && !sanitizedDates.some((d: any) => d.date === eDate)) {
+            sanitizedDates.push({ label: 'Submission Deadline', date: eDate, type: 'deadline' });
+          }
+
+          return {
+            name: parsed.name || 'Extracted Hackathon',
+            description: parsed.description || '',
+            tags: Array.isArray(parsed.tags) && parsed.tags.length ? parsed.tags : ['Hackathon'],
+            website_link: parsed.website_link || '',
+            start_date: sDate,
+            end_date: eDate,
+            timezone: parsed.timezone || 'IST',
+            team_size_limit: typeof parsed.team_size_limit === 'number' ? parsed.team_size_limit : null,
+            prize_tracks: Array.isArray(parsed.prize_tracks) ? parsed.prize_tracks : [],
+            dates: sanitizedDates,
+            tasks: Array.isArray(parsed.tasks) && parsed.tasks.length ? parsed.tasks : [
+              { title: 'Form team & finalize idea', priority: 'high' as const },
+              { title: 'Build core prototype / MVP', priority: 'high' as const },
+              { title: 'Submit final project', priority: 'high' as const }
+            ]
+          };
+        }
       }
+    } catch (err) {
+      console.warn(`Gemini extraction error on ${model}:`, err);
     }
-  } catch (err) {
-    console.warn('Gemini extraction error:', err);
   }
   return null;
 }
@@ -119,7 +194,7 @@ export function extractFromText(rawText: string): ExtractedHackathon {
   // Name heuristic
   let name = lines[0] || 'New Hackathon';
   if (name.length > 70) {
-    const nameMatch = text.match(/(?:hackathon|challenge|fest|con|jam|sprint|summit)\s*[:\-\—]?\s*([^\n\r\.\,]{3,50})/i);
+    const nameMatch = text.match(/(?:hackathon|ideathon|challenge|fest|con|jam|sprint|summit)\s*[:\-\—]?\s*([^\n\r\.\,]{3,50})/i);
     if (nameMatch) name = nameMatch[0].trim();
     else name = name.slice(0, 50) + '...';
   }
@@ -134,38 +209,40 @@ export function extractFromText(rawText: string): ExtractedHackathon {
   const urlMatch = text.match(/https?:\/\/[^\s\)\"\'>]+/i);
   const website_link = urlMatch ? urlMatch[0] : '';
 
-  // Extract Dates
+  // Extract Dates using multiple regex patterns
   const dates: ExtractedHackathon['dates'] = [];
-  let start_date: string | null = null;
-  let end_date: string | null = null;
+  const foundDates: string[] = [];
 
-  const dateRegex = /(?:(\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})|(\d{4}[-/]\d{1,2}[-/]\d{1,2})|(\d{1,2}[-/]\d{1,2}[-/]\d{4}))/gi;
-  const foundDates = [...text.matchAll(dateRegex)].map(m => m[0]);
+  const datePatterns = [
+    /(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-zA-Z]*(?:,?\s+\d{2,4})?)/gi,
+    /(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-zA-Z]*\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{2,4})?)/gi,
+    /\b(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b/g,
+    /\b(\d{4}[-/]\d{1,2}[-/]\d{1,2})\b/g
+  ];
 
-  if (foundDates.length > 0) {
-    const parsed0 = parseDateString(foundDates[0]);
-    if (parsed0) start_date = parsed0;
-  }
-  if (foundDates.length > 1) {
-    const parsed1 = parseDateString(foundDates[1]);
-    if (parsed1) end_date = parsed1;
-  }
-
-  // Specific milestone / deadline searches
-  const submissionMatch = text.match(/(?:submission|submit|deadline|due|ends?|closes?)\s*(?:on|by|at|:)?\s*([^\n\r,;]{3,35})/i);
-  if (submissionMatch) {
-    const subDate = parseDateString(submissionMatch[1]);
-    if (subDate) {
-      dates.push({ label: 'Submission Deadline', date: subDate, type: 'deadline' });
-      if (!end_date) end_date = subDate;
+  for (const pattern of datePatterns) {
+    const matches = [...text.matchAll(pattern)].map(m => m[0]);
+    for (const m of matches) {
+      const parsed = parseDateString(m);
+      if (parsed && !foundDates.includes(parsed)) {
+        foundDates.push(parsed);
+      }
     }
   }
 
-  const registrationMatch = text.match(/(?:registration|register|apply)\s*(?:deadline|closes?|ends?|by|on|:)?\s*([^\n\r,;]{3,35})/i);
-  if (registrationMatch) {
-    const regDate = parseDateString(registrationMatch[1]);
-    if (regDate) {
-      dates.push({ label: 'Registration Deadline', date: regDate, type: 'deadline' });
+  let start_date: string | null = foundDates[0] || null;
+  let end_date: string | null = foundDates.length > 1 ? foundDates[foundDates.length - 1] : null;
+
+  // Search for specific milestone / round deadlines
+  const roundMatches = [...text.matchAll(/(?:round\s*\d+|phase\s*\d+|milestone\s*\d+|registration|submission|finals?|demo\s*day)\s*[:\-\—]?\s*([^\n\r,;]{3,40})/gi)];
+  for (const rMatch of roundMatches) {
+    const fullMatched = rMatch[0];
+    const subDate = parseDateString(fullMatched) || parseDateString(rMatch[1]);
+    if (subDate) {
+      const label = fullMatched.split(/[:\-\—]/)[0].trim().replace(/\b\w/g, l => l.toUpperCase());
+      if (!dates.some(d => d.date === subDate)) {
+        dates.push({ label, date: subDate, type: 'deadline' });
+      }
     }
   }
 
@@ -173,12 +250,12 @@ export function extractFromText(rawText: string): ExtractedHackathon {
     dates.push({ label: 'Hackathon Starts', date: start_date, type: 'event' });
   }
   if (end_date && !dates.some(d => d.date === end_date)) {
-    dates.push({ label: 'Hackathon Ends', date: end_date, type: 'event' });
+    dates.push({ label: 'Final Submission Deadline', date: end_date, type: 'deadline' });
   }
 
   // Timezone
   const tzMatch = text.match(/\b(UTC|GMT|IST|EST|EDT|PST|PDT|CST|CDT|CET|CEST|SGT|JST|AEST)(?:[+-]\d{1,2}(?::\d{2})?)?\b/i);
-  const timezone = tzMatch ? tzMatch[0].toUpperCase() : 'UTC';
+  const timezone = tzMatch ? tzMatch[0].toUpperCase() : 'IST';
 
   // Team Size
   const teamMatch = text.match(/(?:team\s*size|members?|teams?)\s*(?:of|:)?\s*(?:up\s*to\s*)?(\d+)(?:\s*-\s*(\d+))?/i);
@@ -189,15 +266,15 @@ export function extractFromText(rawText: string): ExtractedHackathon {
   }
 
   // Tags
-  const tagKeywords = ['AI', 'ML', 'Web3', 'Blockchain', 'Fintech', 'HealthTech', 'Mobile', 'Open Source', 'Cloud', 'DevOps', 'Cybersecurity', 'IoT', 'GameDev', 'AR/VR', 'EdTech'];
+  const tagKeywords = ['AI', 'ML', 'Web3', 'Blockchain', 'Fintech', 'HealthTech', 'Mobile', 'Open Source', 'Cloud', 'DevOps', 'Cybersecurity', 'IoT', 'GameDev', 'AR/VR', 'EdTech', 'SpaceTech'];
   const tags = tagKeywords.filter(keyword => new RegExp(`\\b${keyword}\\b`, 'i').test(text));
-  if (tags.length === 0) tags.push('General');
+  if (tags.length === 0) tags.push('Hackathon');
 
   // Prize Tracks
   const prize_tracks: string[] = [];
-  const trackMatch = text.match(/(?:tracks?|themes?|categories?)\s*[:\-\—]\s*([^\n\r]+)/i);
+  const trackMatch = text.match(/(?:tracks?|themes?|categories?|domains?)\s*[:\-\—]\s*([^\n\r]+)/i);
   if (trackMatch) {
-    const splitTracks = trackMatch[1].split(/[,|•/]/).map(t => t.trim()).filter(t => t.length > 2 && t.length < 30);
+    const splitTracks = trackMatch[1].split(/[,|•/]/).map(t => t.trim()).filter(t => t.length > 2 && t.length < 35);
     prize_tracks.push(...splitTracks.slice(0, 5));
   }
 
@@ -220,11 +297,12 @@ export function extractFromText(rawText: string): ExtractedHackathon {
     end_date,
     timezone,
     team_size_limit,
-    prize_tracks,
+    prize_tracks: prize_tracks.length ? prize_tracks : ['Main Track'],
     dates,
     tasks
   };
 }
+
 
 export async function extractFromUrl(url: string, apiKey?: string): Promise<ExtractedHackathon> {
   const cleanUrl = url.trim();
