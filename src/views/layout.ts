@@ -1,5 +1,5 @@
 import { Hackathon } from '../types';
-import { state, isUrgentDeadline, daysUntil, getSubmissionDeadline, isPastFinal } from '../state';
+import { state, isUrgentDeadline, daysUntil, getSubmissionDeadline, isPastFinal, getAllHackathonDates } from '../state';
 
 import { renderBoard } from './board';
 import { renderOverview } from './overview';
@@ -18,7 +18,7 @@ export function dismissBanner(id: string) {
 export function renderDeadlineBanner(h?: Hackathon): string {
   if (!h || state.currentView === 'archive') return '';
   if (dismissedBannerHackId === h.id) return '';
-  const dates = state.cache.dates[h.id] || [];
+  const dates = getAllHackathonDates(h);
   const urgent = dates.filter(isUrgentDeadline).sort((a, b) => daysUntil(a.date) - daysUntil(b.date));
   if (!urgent.length) return '';
 
@@ -39,10 +39,11 @@ export function renderDeadlineBanner(h?: Hackathon): string {
   `;
 }
 
+
 export function renderPanicTimer(h?: Hackathon): string {
   if (state.currentView === 'board' || state.currentView === 'archive') return '';
   if (!h || h.status !== 'hacking') return '';
-  const deadline = getSubmissionDeadline(h, state.cache.dates[h.id]);
+  const deadline = getSubmissionDeadline(h);
   if (!deadline) return '';
   return `
     <div class="panic-timer" id="panic-timer" data-deadline="${deadline.date.toISOString()}">
@@ -98,7 +99,7 @@ export function renderLayout(): string {
           <button class="nav-item ${state.currentView === 'overview' ? 'active' : ''}" data-view="overview"><i class="ti ti-layout-dashboard"></i> Overview</button>
           <button class="nav-item ${state.currentView === 'registration' ? 'active' : ''}" data-view="registration"><i class="ti ti-clipboard-check"></i> Registration</button>
           <button class="nav-item ${state.currentView === 'team' ? 'active' : ''}" data-view="team"><i class="ti ti-users"></i> Team <span class="nav-count">${state.cache.members[h?.id || '']?.length || 0}</span></button>
-          <button class="nav-item ${state.currentView === 'dates' ? 'active' : ''}" data-view="dates"><i class="ti ti-calendar-event"></i> Dates <span class="nav-count">${state.cache.dates[h?.id || '']?.length || 0}</span></button>
+          <button class="nav-item ${state.currentView === 'dates' ? 'active' : ''}" data-view="dates"><i class="ti ti-calendar-event"></i> Dates <span class="nav-count">${h ? getAllHackathonDates(h).length : 0}</span></button>
           <button class="nav-item ${state.currentView === 'tasks' ? 'active' : ''}" data-view="tasks"><i class="ti ti-checklist"></i> Tasks <span class="nav-count">${state.cache.tasks[h?.id || '']?.length || 0}</span></button>
         </nav>
         <div class="sidebar-footer">

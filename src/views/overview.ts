@@ -1,14 +1,14 @@
 import { Hackathon } from '../types';
-import { state, isUrgentDeadline } from '../state';
+import { state, isUrgentDeadline, getAllHackathonDates, daysUntil } from '../state';
 import { STATUS_COLUMNS } from '../constants';
 
 export function renderOverview(h: Hackathon): string {
   const members = state.cache.members[h.id] || [];
   const tasks = state.cache.tasks[h.id] || [];
-  const dates = state.cache.dates[h.id] || [];
+  const dates = getAllHackathonDates(h);
   const doneTasks = tasks.filter(t => t.done).length;
   const progress = tasks.length ? Math.round((doneTasks / tasks.length) * 100) : 0;
-  const nextDate = dates.filter(d => new Date(d.date) >= new Date())[0];
+  const nextDate = dates.filter(d => daysUntil(d.date) >= 0)[0];
 
   return `
     <div class="metrics-row">

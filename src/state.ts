@@ -77,6 +77,32 @@ export function daysUntil(dateStr: string): number {
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
+// Returns all dates for a hackathon (combining custom milestones with start_date & end_date)
+export function getAllHackathonDates(h: Hackathon): DateItem[] {
+  const dates = [...(state.cache.dates[h.id] || [])];
+  if (h.start_date && !dates.some(d => d.date === h.start_date)) {
+    dates.push({
+      id: `virtual-start-${h.id}`,
+      hackathon_id: h.id,
+      label: 'Hackathon Starts',
+      date: h.start_date,
+      type: 'event',
+      created_at: h.created_at
+    });
+  }
+  if (h.end_date && !dates.some(d => d.date === h.end_date)) {
+    dates.push({
+      id: `virtual-end-${h.id}`,
+      hackathon_id: h.id,
+      label: 'Final Submission Deadline',
+      date: h.end_date,
+      type: 'deadline',
+      created_at: h.created_at
+    });
+  }
+  return dates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
 // A deadline is "urgent" when it's a deadline-type date landing today or within the next 3 days
 export function isUrgentDeadline(d: DateItem): boolean {
   if (d.type !== 'deadline') return false;
@@ -85,30 +111,24 @@ export function isUrgentDeadline(d: DateItem): boolean {
 }
 
 // Returns the latest / final date for a hackathon (end_date, or highest milestone date)
-export function getFinalDate(h: Hackathon, dates: DateItem[] = []): string | null {
-  const allDates: string[] = [];
-  if (h.end_date) allDates.push(h.end_date);
-  if (h.start_date) allDates.push(h.start_date);
-  dates.forEach(d => {
-    if (d.date) allDates.push(d.date);
-  });
+export function getFinalDate(h: Hackathon): string | null {
+  const allDates = getAllHackathonDates(h);
   if (!allDates.length) return null;
-  allDates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-  return allDates[0];
+  allDates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return allDates[0].date;
 }
 
 // Checks whether the hackathon has passed its final deadline / end date
-export function isPastFinal(h: Hackathon, dates?: DateItem[]): boolean {
-  const ds = dates || state.cache.dates[h.id] || [];
-  const finalDate = getFinalDate(h, ds);
+export function isPastFinal(h: Hackathon): boolean {
+  const finalDate = getFinalDate(h);
   if (!finalDate) return false;
   return daysUntil(finalDate) < 0;
 }
 
 // Returns the nearest upcoming deadline/date that hasn't passed yet
-export function getNearestUpcomingDeadline(h: Hackathon, dates?: DateItem[]): DateItem | null {
-  const ds = dates || state.cache.dates[h.id] || [];
-  const upcoming = ds
+export function getNearestUpcomingDeadline(h: Hackathon): DateItem | null {
+  const allDates = getAllHackathonDates(h);
+  const upcoming = allDates
     .filter(d => daysUntil(d.date) >= 0)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   return upcoming[0] || null;
@@ -116,16 +136,16 @@ export function getNearestUpcomingDeadline(h: Hackathon, dates?: DateItem[]): Da
 
 // The exact submission deadline for the panic timer: the soonest upcoming
 // deadline-type entry in the Dates tab, falling back to the hackathon's end date.
-export function getSubmissionDeadline(h: Hackathon, dates: DateItem[] = []): { label: string; date: Date } | null {
-  const upcomingDeadlines = dates
+export function getSubmissionDeadline(h: Hackathon): { label: string; date: Date } | null {
+  const allDates = getAllHackathonDates(h);
+  const upcomingDeadlines = allDates
     .filter(d => d.type === 'deadline' && daysUntil(d.date) >= 0)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   if (upcomingDeadlines.length) {
     return { label: upcomingDeadlines[0].label, date: new Date(upcomingDeadlines[0].date) };
   }
-  if (h.end_date && daysUntil(h.end_date) >= 0) {
-    return { label: 'Submission deadline', date: new Date(h.end_date) };
-  }
   return null;
 }
+
+
 

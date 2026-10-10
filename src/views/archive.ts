@@ -27,7 +27,7 @@ export function renderArchive(): string {
       </div>
       <div style="display:flex;flex-direction:column;gap:12px;padding:12px;">
         ${archived.map(h => {
-          const finalDate = getFinalDate(h, state.cache.dates[h.id] || []);
+          const finalDate = getFinalDate(h);
           const diff = finalDate ? daysUntil(finalDate) : null;
           const members = state.cache.members[h.id] || [];
           const tasks = state.cache.tasks[h.id] || [];

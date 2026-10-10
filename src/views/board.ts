@@ -4,7 +4,7 @@ import { STATUS_COLUMNS } from '../constants';
 
 export function renderBoardCard(h: Hackathon): string {
   const nextDeadline = getNearestUpcomingDeadline(h);
-  const finalDate = getFinalDate(h, state.cache.dates[h.id] || []);
+  const finalDate = getFinalDate(h);
   const targetDate = nextDeadline?.date || finalDate;
   const diff = targetDate ? daysUntil(targetDate) : null;
   const isEnded = isPastFinal(h);
@@ -56,8 +56,8 @@ export function renderBoard(): string {
       items = items.filter(h => !isPastFinal(h));
     }
     items = [...items].sort((a, b) => {
-      const da = getNearestUpcomingDeadline(a)?.date || getFinalDate(a, state.cache.dates[a.id] || []);
-      const db = getNearestUpcomingDeadline(b)?.date || getFinalDate(b, state.cache.dates[b.id] || []);
+      const da = getNearestUpcomingDeadline(a)?.date || getFinalDate(a);
+      const db = getNearestUpcomingDeadline(b)?.date || getFinalDate(b);
       if (!da && !db) return 0;
       if (!da) return 1;
       if (!db) return -1;
