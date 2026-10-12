@@ -748,53 +748,6 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
     });
   });
 
-  // Edit Registration
-  document.getElementById('edit-reg-btn')?.addEventListener('click', () => {
-    const r = state.cache.regs[state.currentHackathonId!] || {};
-    showModal(`
-      <h3>Edit Registration</h3>
-      <div class="field">
-        <label>Status</label>
-        <select id="r-status">
-          <option value="not_started" ${r.status === 'not_started' ? 'selected' : ''}>Not Started</option>
-          <option value="pending" ${r.status === 'pending' ? 'selected' : ''}>Pending</option>
-          <option value="registered" ${r.status === 'registered' ? 'selected' : ''}>Registered</option>
-          <option value="cancelled" ${r.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
-        </select>
-      </div>
-      <div class="field"><label>Team Name</label><input id="r-team" value="${r.team_name || ''}"></div>
-      <div class="field"><label>Track</label><input id="r-track" value="${r.track || ''}"></div>
-      <div class="field"><label>Reference ID</label><input id="r-ref" value="${r.ref_id || ''}"></div>
-      <div class="field"><label>Link</label><input id="r-link" value="${r.link || ''}"></div>
-      <div class="field"><label>Notes</label><textarea id="r-notes">${r.notes || ''}</textarea></div>
-      <div class="modal-footer">
-        <button class="btn" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" id="save-reg">Save</button>
-      </div>
-    `);
-
-    document.getElementById('save-reg')?.addEventListener('click', async () => {
-      const updates = {
-        hackathon_id: state.currentHackathonId!,
-        status: (document.getElementById('r-status') as HTMLSelectElement).value as any,
-        team_name: (document.getElementById('r-team') as HTMLInputElement).value,
-        track: (document.getElementById('r-track') as HTMLInputElement).value,
-        ref_id: (document.getElementById('r-ref') as HTMLInputElement).value,
-        link: (document.getElementById('r-link') as HTMLInputElement).value,
-        notes: (document.getElementById('r-notes') as HTMLTextAreaElement).value,
-      };
-      try {
-        const updated = await registrationApi.upsert(updates);
-        state.cache.regs[state.currentHackathonId!] = updated;
-        closeModal();
-        render();
-        toast('Registration updated!');
-      } catch (e: any) {
-        toast('Failed: ' + e.message);
-      }
-    });
-  });
-
   // Edit Hackathon
   document.getElementById('edit-hack-btn')?.addEventListener('click', () => {
     const h = state.hackathons.find(x => x.id === state.currentHackathonId);
