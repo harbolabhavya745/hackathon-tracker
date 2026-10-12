@@ -1,4 +1,4 @@
-import { state, loadHackathonDetails } from './state';
+import { state, loadHackathonDetails, getPastTeammates } from './state';
 import { hackathonApi, registrationApi, teamApi, tasksApi, datesApi } from './api/hackathons';
 import { authApi } from './api/auth';
 import { toast, showModal, closeModal } from './utils/ui';
@@ -313,8 +313,11 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
 
   // Navigation Items
   document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', (e: any) => {
+    btn.addEventListener('click', async (e: any) => {
       state.currentView = (e.currentTarget as HTMLElement).dataset.view!;
+      if (state.currentHackathonId && !state.cache.members[state.currentHackathonId]) {
+        await loadHackathonDetails(state.currentHackathonId);
+      }
       render();
     });
   });
@@ -389,6 +392,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
         const idx = state.hackathons.findIndex(x => x.id === id);
         if (idx !== -1) state.hackathons[idx] = updated;
         state.currentHackathonId = id;
+        await loadHackathonDetails(id);
         toast(`Restored "${updated.name}" to Active Board!`);
         render();
       } catch (err: any) {
@@ -473,11 +477,14 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
     el.addEventListener('click', async (e: any) => {
       const id = (e.currentTarget as HTMLElement).dataset.id!;
       const hId = state.currentHackathonId!;
-      const task = state.cache.tasks[hId].find(t => t.id === id)!;
+      const tasks = state.cache.tasks[hId] || [];
+      const task = tasks.find(t => t.id === id);
+      if (!task) return;
       try {
         const updated = await tasksApi.update(id, { done: !task.done });
-        const idx = state.cache.tasks[hId].findIndex(t => t.id === id);
-        state.cache.tasks[hId][idx] = updated;
+        const idx = tasks.findIndex(t => t.id === id);
+        if (idx !== -1) tasks[idx] = updated;
+        state.cache.tasks[hId] = tasks;
         render();
       } catch (e: any) {
         toast('Update failed: ' + e.message);
@@ -486,10 +493,47 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
   });
 
   // Member add
-  document.getElementById('add-member-btn')?.addEventListener('click', () => {
+  document.getElementById('add-member-btn')?.addEventListener('click', async () => {
+    if (!state.cache.allPastMembers) {
+      try {
+        state.cache.allPastMembers = await teamApi.getAll();
+      } catch {
+        state.cache.allPastMembers = Object.values(state.cache.members).flat();
+      }
+    }
+    const pastTeammates = getPastTeammates(state.currentHackathonId);
+
+    const bubblesHtml = pastTeammates.length > 0 ? `
+      <div class="field" style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:500;">
+          <i class="ti ti-users" style="color:var(--accent);"></i> Previous Teammates
+          <span style="font-size:11px;color:var(--text-3);font-weight:normal;">(click to auto-fill)</span>
+        </label>
+        <div class="teammate-bubbles">
+          ${pastTeammates.map((m, idx) => {
+            const initials = (m.name || 'TM').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase();
+            return `
+              <button type="button" class="teammate-bubble" data-idx="${idx}">
+                <span class="bubble-avatar av-${idx % 6}">${initials}</span>
+                <span class="bubble-name">${m.name}</span>
+                ${m.role ? `<span class="bubble-role">${m.role}</span>` : ''}
+              </button>
+            `;
+          }).join('')}
+        </div>
+        <div id="bubble-feedback" class="bubble-feedback"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="flex:1;height:0.5px;background:var(--border);"></div>
+        <span style="font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">or enter details manually</span>
+        <div style="flex:1;height:0.5px;background:var(--border);"></div>
+      </div>
+    ` : '';
+
     showModal(`
       <h3>Add Team Member</h3>
-      <div class="field"><label>Name</label><input id="m-name"></div>
+      ${bubblesHtml}
+      <div class="field"><label>Name</label><input id="m-name" placeholder="Full name"></div>
       <div class="field">
         <label>Role</label>
         <select id="m-role">
@@ -499,7 +543,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
           <option value="Other">Other</option>
         </select>
       </div>
-      <div class="field"><label>Email</label><input id="m-email"></div>
+      <div class="field"><label>Email</label><input id="m-email" placeholder="name@example.com"></div>
       <div class="field"><label>Discord Handle</label><input id="m-discord" placeholder="username"></div>
       <div class="field"><label>GitHub</label><input id="m-github" placeholder="username"></div>
       <div class="modal-footer">
@@ -507,6 +551,43 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
         <button class="btn btn-primary" id="save-member">Add</button>
       </div>
     `);
+
+    // Wire up bubbles click to auto-fill
+    document.querySelectorAll('.teammate-bubble').forEach(btn => {
+      btn.addEventListener('click', (e: any) => {
+        const idx = parseInt((e.currentTarget as HTMLElement).dataset.idx || '0', 10);
+        const m = pastTeammates[idx];
+        if (!m) return;
+
+        (document.getElementById('m-name') as HTMLInputElement).value = m.name || '';
+        const roleSel = document.getElementById('m-role') as HTMLSelectElement;
+        if (roleSel && m.role) {
+          const match = Array.from(roleSel.options).find(o => o.value.toLowerCase() === m.role.toLowerCase());
+          if (match) {
+            roleSel.value = match.value;
+          } else {
+            const newOpt = document.createElement('option');
+            newOpt.value = m.role;
+            newOpt.textContent = m.role;
+            roleSel.appendChild(newOpt);
+            roleSel.value = m.role;
+          }
+        }
+        (document.getElementById('m-email') as HTMLInputElement).value = m.email || '';
+        (document.getElementById('m-discord') as HTMLInputElement).value = m.discord || '';
+        (document.getElementById('m-github') as HTMLInputElement).value = m.github || '';
+
+        document.querySelectorAll('.teammate-bubble').forEach(b => b.classList.remove('selected'));
+        (e.currentTarget as HTMLElement).classList.add('selected');
+
+        const feedback = document.getElementById('bubble-feedback');
+        if (feedback) {
+          feedback.textContent = `Auto-filled details for ${m.name}! You can still edit anything before adding.`;
+          feedback.style.display = 'block';
+        }
+      });
+    });
+
     document.getElementById('save-member')?.addEventListener('click', async () => {
       const name = (document.getElementById('m-name') as HTMLInputElement).value;
       const role = (document.getElementById('m-role') as HTMLSelectElement).value;
@@ -515,7 +596,11 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
       const github = (document.getElementById('m-github') as HTMLInputElement).value.trim();
       try {
         const m = await teamApi.add({ hackathon_id: state.currentHackathonId!, name, role, email, discord, github });
+        state.cache.members[state.currentHackathonId!] = state.cache.members[state.currentHackathonId!] || [];
         state.cache.members[state.currentHackathonId!].push(m);
+        if (state.cache.allPastMembers) {
+          state.cache.allPastMembers.unshift(m);
+        }
         closeModal();
         render();
         toast('Member added!');
@@ -533,6 +618,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
     if (!toAdd.length) { toast('Checklist already loaded'); return; }
     try {
       const created = await Promise.all(toAdd.map(title => tasksApi.add({ hackathon_id: hId, title, priority: 'high' })));
+      state.cache.tasks[hId] = state.cache.tasks[hId] || [];
       state.cache.tasks[hId].push(...created);
       render();
       toast(`Added ${created.length} checklist items`);
@@ -576,6 +662,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
             priority: t.priority,
             done: false
           })));
+          state.cache.tasks[hId] = state.cache.tasks[hId] || [];
           state.cache.tasks[hId].push(...created);
           closeModal();
           render();
@@ -612,6 +699,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
       const priority = (document.getElementById('t-pri') as HTMLSelectElement).value as any;
       try {
         const t = await tasksApi.add({ hackathon_id: state.currentHackathonId!, title, assigned_to, priority });
+        state.cache.tasks[state.currentHackathonId!] = state.cache.tasks[state.currentHackathonId!] || [];
         state.cache.tasks[state.currentHackathonId!].push(t);
         closeModal();
         render();
@@ -649,6 +737,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
       const type = (document.getElementById('d-type') as HTMLSelectElement).value as any;
       try {
         const d = await datesApi.add({ hackathon_id: state.currentHackathonId!, label, date, type });
+        state.cache.dates[state.currentHackathonId!] = state.cache.dates[state.currentHackathonId!] || [];
         state.cache.dates[state.currentHackathonId!].push(d);
         closeModal();
         render();
@@ -769,7 +858,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
       if (!confirm('Delete this team member?')) return;
       try {
         await teamApi.delete(id);
-        state.cache.members[state.currentHackathonId!] = state.cache.members[state.currentHackathonId!].filter(m => m.id !== id);
+        state.cache.members[state.currentHackathonId!] = (state.cache.members[state.currentHackathonId!] || []).filter(m => m.id !== id);
         render();
         toast('Member removed');
       } catch (e: any) {
@@ -784,7 +873,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
       if (!confirm('Delete this date?')) return;
       try {
         await datesApi.delete(id);
-        state.cache.dates[state.currentHackathonId!] = state.cache.dates[state.currentHackathonId!].filter(d => d.id !== id);
+        state.cache.dates[state.currentHackathonId!] = (state.cache.dates[state.currentHackathonId!] || []).filter(d => d.id !== id);
         render();
         toast('Date removed');
       } catch (e: any) {
@@ -799,7 +888,7 @@ export function setupEventListeners(render: () => void, activeChannel: any) {
       if (!confirm('Delete this task?')) return;
       try {
         await tasksApi.delete(id);
-        state.cache.tasks[state.currentHackathonId!] = state.cache.tasks[state.currentHackathonId!].filter(t => t.id !== id);
+        state.cache.tasks[state.currentHackathonId!] = (state.cache.tasks[state.currentHackathonId!] || []).filter(t => t.id !== id);
         render();
         toast('Task removed');
       } catch (e: any) {

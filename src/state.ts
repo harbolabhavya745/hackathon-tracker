@@ -13,6 +13,7 @@ export interface AppState {
     dates: Record<string, DateItem[]>;
     tasks: Record<string, Task[]>;
     regs: Record<string, Registration>;
+    allPastMembers?: TeamMember[];
   };
 }
 
@@ -34,17 +35,27 @@ export async function loadData() {
   try {
     const hs = await hackathonApi.getAll();
     state.hackathons = hs;
-    if (hs.length > 0 && !state.currentHackathonId) {
-      state.currentHackathonId = hs[0].id;
+    const activeHackathons = hs.filter(x => x.status !== 'completed' && !isPastFinal(x));
+    if (!state.currentHackathonId || !hs.some(x => x.id === state.currentHackathonId)) {
+      state.currentHackathonId = activeHackathons.length > 0 ? activeHackathons[0].id : (hs.length > 0 ? hs[0].id : null);
+    } else if (state.currentView !== 'archive' && isPastFinal(hs.find(x => x.id === state.currentHackathonId)!)) {
+      if (activeHackathons.length > 0) {
+        state.currentHackathonId = activeHackathons[0].id;
+      }
     }
 
     // Prefetch dates for every hackathon (not just the open one) so the Board
     // can show each card's real nearest deadline instead of just start/end date.
     await Promise.all(hs.map(async h => {
       if (!state.cache.dates[h.id]) {
-        state.cache.dates[h.id] = await datesApi.getByHackathon(h.id);
+        state.cache.dates[h.id] = (await datesApi.getByHackathon(h.id)) || [];
       }
     }));
+
+    // Prefetch previous teammates across all hackathons
+    teamApi.getAll().then(all => {
+      state.cache.allPastMembers = all;
+    }).catch(() => {});
 
     if (state.currentHackathonId) {
       await loadHackathonDetails(state.currentHackathonId);
@@ -55,6 +66,41 @@ export async function loadData() {
   }
 }
 
+export function getPastTeammates(currentHackathonId?: string | null): TeamMember[] {
+  const currentMembers = (currentHackathonId ? state.cache.members[currentHackathonId] : []) || [];
+  const currentEmails = new Set(
+    currentMembers.map(m => m.email?.toLowerCase().trim()).filter(Boolean)
+  );
+  const currentNames = new Set(
+    currentMembers.map(m => m.name.toLowerCase().trim()).filter(Boolean)
+  );
+
+  const source = [
+    ...(state.cache.allPastMembers || []),
+    ...Object.values(state.cache.members).flat()
+  ];
+
+  const seen = new Set<string>();
+  const list: TeamMember[] = [];
+
+  for (const m of source) {
+    if (!m || !m.name) continue;
+    const normName = m.name.toLowerCase().trim();
+    const normEmail = (m.email || '').toLowerCase().trim();
+    const key = normEmail || normName;
+
+    // Skip if already in current hackathon
+    if (normEmail && currentEmails.has(normEmail)) continue;
+    if (currentNames.has(normName)) continue;
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push(m);
+  }
+
+  return list;
+}
+
 export async function loadHackathonDetails(id: string) {
   const [ms, ds, ts, r] = await Promise.all([
     teamApi.getByHackathon(id),
@@ -62,9 +108,9 @@ export async function loadHackathonDetails(id: string) {
     tasksApi.getByHackathon(id),
     registrationApi.getByHackathon(id)
   ]);
-  state.cache.members[id] = ms;
-  state.cache.dates[id] = ds;
-  state.cache.tasks[id] = ts;
+  state.cache.members[id] = ms || [];
+  state.cache.dates[id] = ds || [];
+  state.cache.tasks[id] = ts || [];
   if (r) state.cache.regs[id] = r;
 }
 

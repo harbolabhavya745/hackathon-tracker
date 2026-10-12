@@ -76,6 +76,15 @@ export const registrationApi = {
 };
 
 export const teamApi = {
+  async getAll() {
+    const { data, error } = await supabase
+      .from('team_members')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []) as TeamMember[];
+  },
+
   async getByHackathon(hackathonId: string) {
     const { data, error } = await supabase
       .from('team_members')
