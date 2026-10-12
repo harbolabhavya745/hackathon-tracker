@@ -84,13 +84,24 @@ export function renderLayout(): string {
   return `
     <div class="app-shell">
       <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-logo"><i class="ti ti-flame"></i></div>
+          <div class="brand-text">
+            <div class="brand-title">Hackathon Hub</div>
+            <div class="brand-subtitle">Tracker & Prep</div>
+          </div>
+        </div>
         <div class="sidebar-top">
-          <select class="hack-sel" id="hack-sel">
-            ${activeHackathons.length 
-              ? activeHackathons.map(x => `<option value="${x.id}" ${x.id === state.currentHackathonId ? 'selected' : ''}>${x.name}</option>`).join('') 
-              : '<option value="" disabled selected>No active hackathons</option>'}
-          </select>
-          <div class="hack-tags">${h && !isPastFinal(h) ? h.tags.join(', ') : (activeHackathons.length ? '' : 'All hackathons archived')}</div>
+          <div class="hack-sel-label"><i class="ti ti-trophy"></i> Active Hackathon</div>
+          <div class="select-container">
+            <select class="hack-sel" id="hack-sel">
+              ${activeHackathons.length 
+                ? activeHackathons.map(x => `<option value="${x.id}" ${x.id === state.currentHackathonId ? 'selected' : ''}>${x.name}</option>`).join('') 
+                : '<option value="" disabled selected>No active hackathons</option>'}
+            </select>
+            <i class="ti ti-selector select-chevron"></i>
+          </div>
+          <div class="hack-tags">${h && !isPastFinal(h) ? h.tags.map(t => `#${t}`).join(' ') : (activeHackathons.length ? '' : 'All hackathons archived')}</div>
         </div>
         <nav class="sidebar-nav">
           <button class="nav-item ${state.currentView === 'board' ? 'active' : ''}" data-view="board"><i class="ti ti-layout-kanban"></i> Board</button>
@@ -103,11 +114,13 @@ export function renderLayout(): string {
           <button class="nav-item ${state.currentView === 'tasks' ? 'active' : ''}" data-view="tasks"><i class="ti ti-checklist"></i> Tasks <span class="nav-count">${state.cache.tasks[h?.id || '']?.length || 0}</span></button>
         </nav>
         <div class="sidebar-footer">
-          <button class="btn btn-full btn-primary" id="smart-import-btn" style="background:var(--accent);border-color:var(--accent);color:#fff;"><i class="ti ti-sparkles"></i> Auto-Track / Import</button>
-          <button class="btn btn-full" id="new-hack-btn"><i class="ti ti-plus"></i> Manual Add</button>
-          <button class="btn btn-full" id="export-pdf-btn"><i class="ti ti-file-type-pdf"></i> Export Summary (PDF)</button>
-          <button class="btn btn-full btn-danger" id="logout-btn"><i class="ti ti-logout"></i> Logout</button>
-          <div class="conn-status"><span class="conn-dot ok"></span><span>Connected as ${state.user.email}</span></div>
+          <button class="btn btn-full btn-primary" id="smart-import-btn"><i class="ti ti-sparkles"></i> Auto-Track / Import</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <button class="btn btn-sm" id="new-hack-btn"><i class="ti ti-plus"></i> Manual</button>
+            <button class="btn btn-sm" id="export-pdf-btn"><i class="ti ti-file-type-pdf"></i> Export</button>
+          </div>
+          <button class="btn btn-full btn-ghost btn-danger" id="logout-btn" style="font-size:11.5px;padding:5px 8px;"><i class="ti ti-logout"></i> Logout</button>
+          <div class="conn-status"><span class="conn-dot ok"></span><span>${state.user.email}</span></div>
         </div>
       </aside>
 
